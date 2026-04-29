@@ -1,0 +1,20 @@
+{
+  "input_file": "/Users/zwq/six_smester/visual/homework/dataset/JobWanted.xlsx",
+  "raw_rows": 430664,
+  "duplicate_rows_removed": 53,
+  "clean_base_rows": 430611,
+  "salary_valid_rows": 430598,
+  "salary_invalid_rows": 13,
+  "salary_outlier_rows": 41712,
+  "salary_outlier_bounds_year": {
+    "low": -24000.0,
+    "high": 216000.0
+  },
+  "config": {
+    "work_hours_per_day": 8.0,
+    "work_days_per_month": 21.75,
+    "work_weeks_per_month": 4.33,
+    "default_salary_months": 12,
+    "iqr_k": 1.5
+  }
+}

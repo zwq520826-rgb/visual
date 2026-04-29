@@ -1,0 +1,8 @@
+field,meaning,data_type,note
+job_title,职位名称,类别/编码字段,高基数，适合聚合分析
+city,行政区划,类别/编码字段,城市编码，适合地域统计
+salary,薪酬,文本字段,需解析为可比较数值
+experience,经验要求,类别/编码字段,可转有序等级
+education,学历要求,类别/编码字段,可转有序等级
+company,企业,类别/编码字段,高基数，适合活跃度统计
+company_type,行业类别,类别/编码字段,适合行业分布统计
