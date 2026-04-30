@@ -1,0 +1,7 @@
+talent_threshold_dimension_processed.csv	包含经验 + 学历综合门槛、各维度门槛指数、高门槛高热度职位等结果
+job_talent_threshold.csv	各职位的综合人才门槛指数表
+industry_talent_threshold.csv	各行业的综合人才门槛指数表
+city_talent_threshold.csv	各城市的综合人才门槛指数表
+high_threshold_job_top20.csv	综合门槛 TOP20 的职位表
+threshold_salary_pattern_cross.csv	人才门槛等级与薪酬模式的交叉分析表
+high_threshold_high_hot_job.csv	高门槛 + 高热度的职位排序表
