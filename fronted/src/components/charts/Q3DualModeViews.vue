@@ -85,7 +85,7 @@
       <section class="panel">
         <div class="panel-head">
           <h3>视图二：多维特征关联平行坐标系</h3>
-          <span class="meta">{{ parallelModeLabel }} · {{ parallelRows.length }} 线</span>
+          <span class="meta">{{ parallelModeLabel }} · {{ parallelVisibleCount }} 线</span>
         </div>
         <div ref="parallelRef" class="chart parallel"></div>
       </section>
@@ -187,6 +187,11 @@ const parallelRows = computed(() => {
   return parallelMode.value === 'centroid'
     ? (p.centroid_lines || [])
     : (p.sampled_lines || [])
+})
+
+const parallelVisibleCount = computed(() => {
+  if (parallelMode.value !== 'sampled') return parallelRows.value.length
+  return Math.min(parallelRows.value.length, 900)
 })
 
 const getBarrierValue = (p) => {
@@ -899,15 +904,48 @@ const renderParallel = () => {
   const company = axisMeta.value.company_labels || ['Other']
   const salaryRange = axisMeta.value.salary_range || [0, 100]
 
-  const data = parallelRows.value.map((row) => {
+  const sourceRows = (() => {
+    if (parallelMode.value !== 'sampled') return parallelRows.value
+    const rows = parallelRows.value || []
+    if (rows.length <= 900) return rows
+    // 分簇均衡抽样，避免单簇主导视觉
+    const groups = new Map()
+    rows.forEach((r) => {
+      const cid = Number(r?.cluster_id || 0)
+      if (!groups.has(cid)) groups.set(cid, [])
+      groups.get(cid).push(r)
+    })
+    const target = 900
+    const rng = (seed) => {
+      let x = Math.sin(seed) * 10000
+      return x - Math.floor(x)
+    }
+    const picked = []
+    const gids = [...groups.keys()].sort((a, b) => a - b)
+    const total = rows.length
+    gids.forEach((cid, gi) => {
+      const arr = groups.get(cid) || []
+      const quota = Math.max(60, Math.round((arr.length / total) * target))
+      if (arr.length <= quota) {
+        picked.push(...arr)
+        return
+      }
+      const idxs = [...arr.keys()]
+      idxs.sort((a, b) => rng((a + 1) * (gi + 11)) - rng((b + 1) * (gi + 11)))
+      idxs.slice(0, quota).forEach((i) => picked.push(arr[i]))
+    })
+    return picked.slice(0, target)
+  })()
+
+  const data = sourceRows.map((row) => {
     const picked = lineHighlightedByScatter(row)
     return {
       value: row.values,
       raw: row,
       lineStyle: {
         color: clusterColor(row.cluster_id),
-        opacity: picked ? 0.85 : 0.06,
-        width: picked ? 1.9 : 0.8
+        opacity: picked ? 0.2 : 0.02,
+        width: picked ? 0.9 : 0.5
       }
     }
   })
@@ -958,7 +996,7 @@ const renderParallel = () => {
       series: [
         {
           type: 'parallel',
-          lineStyle: { width: 1, opacity: 0.25 },
+          lineStyle: { width: 0.8, opacity: 0.18 },
           data
         }
       ]

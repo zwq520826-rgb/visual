@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 class Salary3DService:
     """三维薪资分析业务逻辑服务"""
-    CLUSTER_CACHE_VERSION = "q3_cluster_v13_fixed_k5_pca_projection_unique_jobtitle"
+    CLUSTER_CACHE_VERSION = "q3_cluster_v14_fixed_k5_city_tier_fallback"
     
     def __init__(self, db_manager: DatabaseManager):
         self.db_manager = db_manager
@@ -744,7 +744,7 @@ class Salary3DService:
             SELECT
                 js.job_title,
                 MIN(js.company_type) AS company_type,
-                NULL AS city_tier,
+                COALESCE(MIN(ct.city_tier), '未知') AS city_tier,
                 AVG(js.median_salary) AS median_salary,
                 AVG(js.q1_salary) AS q1_salary,
                 AVG(js.q3_salary) AS q3_salary,
@@ -754,6 +754,45 @@ class Salary3DService:
                 SUM(js.records_count) AS records_count,
                 AVG(js.total_shannon_entropy) AS total_shannon_entropy
             FROM job_summary js
+            LEFT JOIN (
+                SELECT
+                    t.job_title,
+                    CASE
+                        WHEN t.cnt_t1 >= GREATEST(t.cnt_new_t1, t.cnt_t2, t.cnt_other) THEN '一线'
+                        WHEN t.cnt_new_t1 >= GREATEST(t.cnt_t1, t.cnt_t2, t.cnt_other) THEN '新一线'
+                        WHEN t.cnt_t2 >= GREATEST(t.cnt_t1, t.cnt_new_t1, t.cnt_other) THEN '二线'
+                        ELSE '其他'
+                    END AS city_tier
+                FROM (
+                    SELECT
+                        d.job_title,
+                        SUM(CASE WHEN d.city IN ('北京', '上海', '广州', '深圳') THEN 1 ELSE 0 END) AS cnt_t1,
+                        SUM(CASE WHEN d.city IN (
+                            '成都', '重庆', '杭州', '武汉', '西安', '苏州', '天津', '南京',
+                            '郑州', '长沙', '东莞', '沈阳', '青岛', '合肥', '佛山'
+                        ) THEN 1 ELSE 0 END) AS cnt_new_t1,
+                        SUM(CASE WHEN d.city IN (
+                            '宁波', '无锡', '厦门', '福州', '济南', '大连', '哈尔滨', '昆明',
+                            '长春', '温州', '石家庄', '泉州', '南宁', '金华', '常州', '珠海',
+                            '惠州', '嘉兴', '南昌', '中山', '太原', '徐州', '南通'
+                        ) THEN 1 ELSE 0 END) AS cnt_t2,
+                        SUM(CASE WHEN d.city IS NULL OR d.city = '' THEN 0 ELSE 1 END)
+                          - SUM(CASE WHEN d.city IN ('北京', '上海', '广州', '深圳') THEN 1 ELSE 0 END)
+                          - SUM(CASE WHEN d.city IN (
+                              '成都', '重庆', '杭州', '武汉', '西安', '苏州', '天津', '南京',
+                              '郑州', '长沙', '东莞', '沈阳', '青岛', '合肥', '佛山'
+                          ) THEN 1 ELSE 0 END)
+                          - SUM(CASE WHEN d.city IN (
+                              '宁波', '无锡', '厦门', '福州', '济南', '大连', '哈尔滨', '昆明',
+                              '长春', '温州', '石家庄', '泉州', '南宁', '金华', '常州', '珠海',
+                              '惠州', '嘉兴', '南昌', '中山', '太原', '徐州', '南通'
+                          ) THEN 1 ELSE 0 END) AS cnt_other
+                    FROM data d
+                    WHERE d.job_title IS NOT NULL
+                      AND d.job_title <> ''
+                    GROUP BY d.job_title
+                ) t
+            ) ct ON ct.job_title = js.job_title
             WHERE js.job_title IS NOT NULL
               AND js.job_title <> ''
               AND js.median_salary IS NOT NULL
@@ -936,6 +975,13 @@ class Salary3DService:
         s = str(city_tier or "").strip()
         if not s:
             return "其他"
+        sl = s.lower()
+        if sl in {"t1", "tier1", "first_tier", "first-tier", "1st_tier"}:
+            return "一线"
+        if sl in {"new_t1", "new_tier1", "new-first-tier", "new_first_tier"}:
+            return "新一线"
+        if sl in {"t2", "tier2", "second_tier", "second-tier", "2nd_tier"}:
+            return "二线"
         if "新一线" in s:
             return "新一线"
         if "一线" in s:
