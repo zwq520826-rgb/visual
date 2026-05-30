@@ -50,9 +50,9 @@
               <Q3Tab />
             </div>
 
-                  <!-- Q4 城市等级热力图 -->
+                  <!-- Q4 地域数据分析 -->
             <div v-else-if="activeTab === 'q4'" key="q4" class="tab-content active">
-              <HeatmapTab />
+              <Q4Tab />
             </div>
 
             <!-- Q5 行业发展动态与新兴职位 -->
@@ -72,7 +72,7 @@ import HomeTab from './tabs/HomeTab.vue'
 import Q1Tab from './tabs/Q1Tab.vue'
 import Q2Tab from './tabs/Q2Tab.vue'
 import Q3Tab from './tabs/Q3Tab.vue'
-import HeatmapTab from './tabs/HeatmapTab.vue'
+import Q4Tab from './tabs/Q4Tab.vue'
 import Q5Tab from './tabs/Q5Tab.vue'
   
 const activeTab = ref('home')
@@ -115,6 +115,15 @@ const getIndicatorStyle = () => {
 
 <style scoped>
 .dashboard {
+  --layout-title: var(--theme-text, #163a60);
+  --layout-text: var(--theme-text-soft, #597a9d);
+  --layout-bg: rgba(255, 255, 255, 0.92);
+  --layout-bg-soft: rgba(240, 248, 255, 0.82);
+  --layout-border: var(--theme-border, rgba(46, 122, 198, 0.2));
+  --layout-accent: var(--theme-primary, #2e7ac6);
+  --layout-accent-deep: var(--theme-primary-deep, #1f5f9d);
+  --layout-accent-warm: var(--theme-secondary, #d66b3d);
+  --layout-shadow: 0 14px 30px rgba(24, 57, 93, 0.12);
   padding: 0;
   position: relative;
   min-height: 100vh;
@@ -137,11 +146,11 @@ const getIndicatorStyle = () => {
   align-items: center;
   gap: 12px;
   padding: 10px 15px;
-  background: rgba(255, 255, 255, 0.85);
+  background: linear-gradient(140deg, rgba(255, 255, 255, 0.94), rgba(243, 249, 255, 0.92));
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 10px 24px rgba(24, 57, 93, 0.12);
+  border-bottom: 1px solid var(--layout-border);
 }
 
 .nav-title {
@@ -157,7 +166,7 @@ const getIndicatorStyle = () => {
 .nav-title h1 {
   font-size: 1.4em;
   font-weight: 600;
-  color: #2c3e50;
+  color: var(--layout-title);
   text-shadow: none;
   white-space: nowrap;
   margin: 0;
@@ -165,7 +174,7 @@ const getIndicatorStyle = () => {
 }
 
 .nav-title:hover h1 {
-  color: #d97757;
+  color: var(--layout-accent);
 }
 
 /* 标签页容器 */
@@ -177,15 +186,13 @@ const getIndicatorStyle = () => {
 .tabs-container {
   position: relative;
   display: flex;
-  background: rgba(255, 255, 255, 0.6);
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.86), rgba(239, 247, 255, 0.82));
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border-radius: 12px;
   padding: 6px;
-  box-shadow: 
-    0 2px 12px rgba(0, 0, 0, 0.08),
-    inset 0 1px 0 rgba(255, 255, 255, 0.8);
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 8px 16px rgba(24, 57, 93, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  border: 1px solid var(--layout-border);
   overflow: hidden;
 }
 
@@ -195,7 +202,7 @@ const getIndicatorStyle = () => {
   left: 0;
   width: 100%;
   height: 100%;
-  background: linear-gradient(135deg, rgba(217, 119, 87, 0.1) 0%, rgba(217, 119, 87, 0.05) 100%);
+  background: linear-gradient(135deg, rgba(46, 122, 198, 0.08) 0%, rgba(214, 107, 61, 0.08) 100%);
   z-index: 0;
 }
 
@@ -210,7 +217,7 @@ const getIndicatorStyle = () => {
   cursor: pointer;
   font-size: 14px;
   font-weight: 700;
-  color: rgba(44, 62, 80, 0.9);
+  color: rgba(22, 58, 96, 0.88);
   transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
   z-index: 2;
   display: flex;
@@ -227,7 +234,7 @@ const getIndicatorStyle = () => {
   width: 0;
   height: 0;
   border-radius: 50%;
-  background: rgba(217, 119, 87, 0.15);
+  background: rgba(46, 122, 198, 0.15);
   transform: translate(-50%, -50%);
   transition: width 0.6s, height 0.6s;
 }
@@ -238,18 +245,18 @@ const getIndicatorStyle = () => {
 }
 
 .tab-button:hover {
-  color: #d97757;
+  color: var(--layout-accent);
   transform: translateY(-2px);
 }
 
 .tab-button.active {
-  color: #ffffff;
+  color: #f3fbff;
   font-weight: 600;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
 .tab-button.active:hover {
-  color: #ffffff;
+  color: #f7f3ea;
   transform: translateY(-2px);
 }
 
@@ -263,13 +270,11 @@ const getIndicatorStyle = () => {
   position: absolute;
   top: 6px;
   height: calc(100% - 12px);
-  background: linear-gradient(135deg, #d97757 0%, #c96643 100%);
+  background: linear-gradient(135deg, var(--layout-accent-deep) 0%, var(--layout-accent) 100%);
   backdrop-filter: blur(10px);
   border-radius: 8px;
-  box-shadow: 
-    0 2px 12px rgba(217, 119, 87, 0.4),
-    0 4px 8px rgba(217, 119, 87, 0.3),
-    0 0 0 1px rgba(217, 119, 87, 0.3);
+  box-shadow: 0 3px 12px rgba(24, 57, 93, 0.25), 0 5px 10px rgba(46, 122, 198, 0.2),
+    0 0 0 1px rgba(255, 255, 255, 0.35);
   transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
   z-index: 1;
   opacity: 1;
@@ -283,7 +288,7 @@ const getIndicatorStyle = () => {
   width: 0;
   height: 0;
   border-radius: 50%;
-  background: rgba(217, 119, 87, 0.25);
+  background: rgba(214, 107, 61, 0.26);
   transform: translate(-50%, -50%);
   animation: ripple 1.5s ease-out infinite;
 }
@@ -310,13 +315,11 @@ const getIndicatorStyle = () => {
 }
 
 .content-glass {
-  background: #ffffff;
+  background: linear-gradient(165deg, rgba(255, 255, 255, 0.95), rgba(241, 249, 255, 0.93));
   border-radius: 16px;
   padding: 15px;
-  box-shadow: 
-    0 4px 20px rgba(0, 0, 0, 0.08),
-    0 0 0 1px rgba(0, 0, 0, 0.05);
-  border: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow: 0 16px 32px rgba(24, 57, 93, 0.12), 0 0 0 1px rgba(255, 255, 255, 0.65);
+  border: 1px solid var(--layout-border);
   min-height: calc(100vh - 200px);
   position: relative;
   overflow: visible;
@@ -336,11 +339,7 @@ const getIndicatorStyle = () => {
   left: 0;
   right: 0;
   height: 1px;
-  background: linear-gradient(90deg, 
-    transparent, 
-    rgba(217, 119, 87, 0.3), 
-    transparent
-  );
+  background: linear-gradient(90deg, transparent, rgba(46, 122, 198, 0.24), transparent);
   z-index: 0;
   pointer-events: none;
 }
@@ -464,16 +463,16 @@ const getIndicatorStyle = () => {
 @media (prefers-color-scheme: dark) {
   .content-glass {
     background: rgba(255, 255, 255, 0.95);
-    border-color: rgba(255, 255, 255, 0.1);
+    border-color: var(--layout-border);
   }
   
   .tabs-container {
-    background: rgba(30, 30, 40, 0.3);
-    border-color: rgba(255, 255, 255, 0.1);
+    background: rgba(243, 249, 255, 0.86);
+    border-color: var(--layout-border);
   }
   
   .active-indicator {
-    background: rgba(255, 255, 255, 0.15);
+    background: linear-gradient(135deg, var(--layout-accent-deep), var(--layout-accent));
   }
 }
 </style>

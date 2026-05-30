@@ -48,3 +48,45 @@ export async function getIndustryTrendRose() {
   return await apiClient.get('/industry/trend/rose')
 }
 
+/**
+ * 获取 Q5 引力图顶部新兴岗位（默认前5）
+ * @param {number} topN - 返回岗位数量
+ * @returns {Promise<Object>}
+ */
+export async function getQ5ForceEmergingJobs(topN = 5) {
+  return await apiClient.get('/q5/force/emerging-jobs', {
+    params: { top_n: topN }
+  })
+}
+
+/**
+ * 获取单岗位行业引力网络
+ * @param {string} jobTitle - 岗位编码
+ * @param {number} topKIndustry - 行业数量上限
+ * @param {string} tier - 城市层级
+ * @returns {Promise<Object>}
+ */
+export async function getQ5ForceJobNetwork(jobTitle, topKIndustry = 12, tier = 'all') {
+  return await apiClient.get('/q5/force/job-network', {
+    params: {
+      job_title: jobTitle,
+      top_k_industry: topKIndustry,
+      tier
+    }
+  })
+}
+
+/**
+ * 获取 Q5 枢纽岗位排名
+ * @param {number} topN - 返回条数
+ * @param {number} topKIndustry - 每岗位考虑行业数量
+ * @returns {Promise<Object>}
+ */
+export async function getQ5ForceHubRanking(topN = 30, topKIndustry = 12) {
+  return await apiClient.get('/q5/force/hub-ranking', {
+    params: {
+      top_n: topN,
+      top_k_industry: topKIndustry
+    }
+  })
+}

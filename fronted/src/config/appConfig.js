@@ -12,9 +12,9 @@ export const appConfig = {
   
   // 主题配置
   theme: {
-    primaryColor: '#667eea',
-    secondaryColor: '#764ba2',
-    backgroundColor: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+    primaryColor: '#1b8cff',
+    secondaryColor: '#00d7ff',
+    backgroundColor: 'linear-gradient(135deg, #070d1f 0%, #071425 100%)'
   },
   
   // 图表配置
@@ -30,4 +30,3 @@ export const appConfig = {
     pageSizeOptions: [10, 20, 50, 100]
   }
 }
-

@@ -1,74 +1,79 @@
 <template>
-  <div class="q1-tab">
-    <!-- 左侧：散点图（占大部分） -->
-    <div class="left-section">
-      <h2>职位分布散点气泡图</h2>
-      <p class="chart-description">
-        以职位为基本单元，展示经验要求、薪资水平、招聘人数的关系
-      </p>
-      <div class="scatter-chart">
-        <ScatterBubbleChart ref="scatterChart" />
+  <section class="q1-shell">
+    <header class="q1-hero">
+      <div class="hero-main">
+        <p class="hero-kicker">Q1 · 职位差异度分析</p>
+        <h2>职位分布散点气泡图</h2>
+        <p class="chart-description">
+          以职位为基本单元，展示经验要求、薪资水平、招聘规模与行业泛化性的结构关系。
+        </p>
       </div>
-    </div>
-    
-    <!-- 右侧：上下排列两个图 -->
-    <div class="right-section">
-      <!-- 雷达图 -->
-      <template v-if="currentMode === 'city'">
-        <div class="right-chart radar-chart">
-          <h3>职位多维对比</h3>
-          <p class="chart-description-small">
-            从散点图选择2-3个职位，对比薪资、经验、学历、招聘人数、城市等级
-          </p>
-          <RadarComparisonChart :selectedJobs="citySelectedJobs" />
+      <div class="hero-metrics">
+        <div class="metric-pill">
+          <span class="label">已选职位</span>
+          <strong>{{ selectedCount }}</strong>
         </div>
-        
-        <div class="right-chart ring-chart">
-          <h3>职位差异度分析</h3>
-          <p class="chart-description-small">
-            选择2个职位，分析五个维度的差异贡献度
-          </p>
-          <DifferenceRingChart :selectedJobs="citySelectedJobs" />
+        <div class="metric-pill">
+          <span class="label">雷达图需求</span>
+          <strong>2-3 个</strong>
         </div>
-      </template>
+        <div class="metric-pill">
+          <span class="label">蝴蝶图需求</span>
+          <strong>2 个</strong>
+        </div>
+      </div>
+    </header>
 
-      <template v-else>
-        <div class="right-chart radar-chart">
-          <h3>行业差异分布条</h3>
+    <div class="q1-tab">
+      <article class="left-section panel-card">
+        <div class="panel-head">
+          <h3>主视图 A：职位散点矩阵</h3>
           <p class="chart-description-small">
-            中轴线表示差异中位，左右柱形展示各行业在五个维度的超越幅度
+            可点击气泡联动右侧两张分析图；支持维度切换、缩放与 Top 标注。
           </p>
-          <IndustryDifferenceBarChart :selectedIndustries="industrySelected" />
+        </div>
+        <div class="scatter-chart">
+          <ScatterBubbleChart ref="scatterChart" />
+        </div>
+      </article>
+
+      <aside class="right-section">
+        <div class="right-chart radar-chart panel-card">
+          <div class="panel-head">
+            <h3>视图 B：职位多维对比（雷达）</h3>
+            <p class="chart-description-small">
+              支持 2-3 个职位叠加对比，快速查看薪资、门槛与热度轮廓。
+            </p>
+          </div>
+          <RadarComparisonChart :selectedJobs="selectedNodes" />
         </div>
 
-        <div class="right-chart ring-chart">
-          <h3>行业差异力引导图</h3>
-          <p class="chart-description-small">
-            节点距离中心越近，表示该维度差异贡献越大，整体呈现漂浮状态
-          </p>
-          <ForceDirectedChart :selectedIndustries="industrySelected" />
+        <div class="right-chart ring-chart panel-card">
+          <div class="panel-head">
+            <h3>视图 C：差异度分解（蝴蝶）</h3>
+            <p class="chart-description-small">
+              仅支持 2 个职位；按维度展示两职位真实值与差异贡献。
+            </p>
+          </div>
+          <JobDifferenceButterflyChart :selectedJobs="selectedNodes" />
         </div>
-      </template>
+      </aside>
     </div>
-  </div>
+  </section>
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import ScatterBubbleChart from '@/components/charts/ScatterBubbleChart.vue'
 import RadarComparisonChart from '@/components/charts/RadarComparisonChart.vue'
-import DifferenceRingChart from '@/components/charts/DifferenceRingChart.vue'
-import IndustryDifferenceBarChart from '@/components/charts/IndustryDifferenceBarChart.vue'
-import ForceDirectedChart from '@/components/charts/ForceDirectedChart.vue'
+import JobDifferenceButterflyChart from '@/components/charts/JobDifferenceButterflyChart.vue'
 
 // Q1 职位差异度分析标签页
-// 包含三个视图：左侧散点图，右侧雷达图和环状图
+// 包含三个视图：左侧散点图，右侧极坐标柱图和蝴蝶图
 
 const scatterChart = ref(null)
 const selectedNodes = ref([])
-const currentMode = ref('city')
-const citySelectedJobs = computed(() => currentMode.value === 'city' ? selectedNodes.value : [])
-const industrySelected = computed(() => currentMode.value === 'industry' ? selectedNodes.value : [])
+const selectedCount = computed(() => selectedNodes.value.length)
 
 // 使用间隔轮询方式监听选中节点
 let pollTimer = null
@@ -76,12 +81,6 @@ onMounted(() => {
   pollTimer = setInterval(() => {
     if (scatterChart.value) {
       const nodes = scatterChart.value.selectedNodes || []
-      const mode = scatterChart.value.viewMode || 'city'
-
-      if (mode !== currentMode.value) {
-        currentMode.value = mode
-      }
-
       const needUpdate = nodes.length !== selectedNodes.value.length || 
         JSON.stringify(nodes) !== JSON.stringify(selectedNodes.value)
 
@@ -100,38 +99,109 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+.q1-shell {
+  --q1-bg-1: #f8fcff;
+  --q1-bg-2: #eaf4ff;
+  --q1-card-bg: rgba(255, 255, 255, 0.92);
+  --q1-card-border: rgba(45, 88, 142, 0.2);
+  --q1-title: #133a63;
+  --q1-text: #2c4d72;
+  --q1-muted: #5d7c9f;
+  --q1-accent: #2e7ac6;
+  --q1-accent-2: #d66b3d;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px;
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 88% 0%, rgba(214, 107, 61, 0.14), transparent 30%),
+    radial-gradient(circle at 0% 100%, rgba(46, 122, 198, 0.12), transparent 40%),
+    linear-gradient(180deg, var(--q1-bg-1), var(--q1-bg-2));
+}
+
+.q1-hero {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 16px 18px;
+  border-radius: 14px;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.95), rgba(243, 250, 255, 0.95));
+  border: 1px solid rgba(46, 122, 198, 0.18);
+  box-shadow: 0 12px 28px rgba(40, 85, 137, 0.1);
+  animation: q1Rise 0.45s ease both;
+}
+
+.hero-main h2 {
+  margin: 0;
+  color: var(--q1-title);
+  font-size: clamp(1.15rem, 1.5vw, 1.45rem);
+  line-height: 1.28;
+}
+
+.hero-kicker {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--q1-accent);
+}
+
+.hero-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(104px, 1fr));
+  gap: 10px;
+  width: min(420px, 48%);
+}
+
+.metric-pill {
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(46, 122, 198, 0.25);
+  background: rgba(234, 244, 255, 0.88);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.metric-pill .label {
+  color: var(--q1-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.metric-pill strong {
+  color: var(--q1-title);
+  font-size: 18px;
+  line-height: 1.2;
+}
+
 .q1-tab {
   display: flex;
-  gap: 30px;
+  gap: 16px;
   align-items: stretch;
-  min-height: 600px;
-}
-
-.q1-tab h2 {
-  margin-bottom: 20px;
-  color: #2c3e50;
-}
-
-.q1-tab h3 {
-  margin-bottom: 15px;
-  color: #2c3e50;
-  font-size: 18px;
+  min-height: 640px;
+  animation: q1Rise 0.55s ease both;
+  animation-delay: 0.08s;
 }
 
 .chart-description {
-  margin-bottom: 20px;
-  color: #666;
-  line-height: 1.6;
-}
-
-.chart-description-small {
-  margin-bottom: 15px;
-  color: #666;
-  line-height: 1.5;
+  margin: 8px 0 0;
+  max-width: 66ch;
+  color: var(--q1-muted);
+  line-height: 1.58;
   font-size: 14px;
 }
 
-/* 左侧区域：散点图（占大部分） */
+.chart-description-small {
+  margin: 4px 0 0;
+  color: #547495;
+  line-height: 1.52;
+  font-size: 13px;
+}
+
 .left-section {
   flex: 2;
   min-width: 0;
@@ -143,10 +213,9 @@ onUnmounted(() => {
   flex: 1;
   display: flex;
   flex-direction: column;
-  min-height: 400px;
+  min-height: 460px;
 }
 
-/* 右侧区域：上下排列两个图 */
 .right-section {
   flex: 1;
   min-width: 0;
@@ -154,6 +223,25 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 20px;
   height: 100%;
+}
+
+.panel-card {
+  background: var(--q1-card-bg);
+  border: 1px solid var(--q1-card-border);
+  border-radius: 14px;
+  box-shadow: 0 10px 24px rgba(42, 87, 139, 0.12);
+  padding: 12px;
+}
+
+.panel-head {
+  margin-bottom: 10px;
+}
+
+.panel-head h3 {
+  margin: 0;
+  color: var(--q1-title);
+  font-size: 17px;
+  line-height: 1.3;
 }
 
 .right-chart {
@@ -164,49 +252,67 @@ onUnmounted(() => {
 }
 
 .radar-chart {
-  border-bottom: 2px solid #e0e0e0;
-  padding-bottom: 20px;
-  box-sizing: border-box;
+  position: relative;
+  overflow: hidden;
+}
+
+.radar-chart::after {
+  content: '';
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(46, 122, 198, 0.22), transparent);
+  pointer-events: none;
 }
 
 .ring-chart {
-  padding-top: 20px;
+  position: relative;
+}
+
+.ring-chart::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 84px;
+  height: 84px;
+  background: radial-gradient(circle, rgba(214, 107, 61, 0.12), transparent 70%);
+  pointer-events: none;
+}
+
+.right-chart {
+  background: linear-gradient(165deg, rgba(255, 255, 255, 0.95), rgba(244, 251, 255, 0.92));
+}
+
+.radar-chart,
+.ring-chart {
   box-sizing: border-box;
 }
 
-/* 图表占位区域 */
-.chart-placeholder {
-  flex: 1;
-  border: 2px dashed #d0d0d0;
-  border-radius: 8px;
-  background: #fafafa;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 280px;
+@keyframes q1Rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
-.placeholder-content {
-  text-align: center;
-  color: #999;
+@media (max-width: 1320px) {
+  .q1-hero {
+    flex-direction: column;
+  }
+
+  .hero-metrics {
+    width: 100%;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
-.placeholder-content p {
-  margin: 5px 0;
-}
-
-.placeholder-content p:first-child {
-  font-size: 18px;
-  font-weight: 600;
-  color: #666;
-}
-
-.placeholder-hint {
-  font-size: 14px;
-  color: #aaa;
-}
-
-/* 响应式设计：小屏幕时改为纵向布局 */
 @media (max-width: 1200px) {
   .q1-tab {
     flex-direction: column;
@@ -214,20 +320,37 @@ onUnmounted(() => {
   
   .right-section {
     flex-direction: row;
-    gap: 20px;
+    gap: 14px;
   }
   
   .radar-chart {
-    border-bottom: none;
-    border-right: 2px solid #e0e0e0;
-    padding-bottom: 0;
-    padding-right: 20px;
+    min-height: 350px;
   }
   
   .ring-chart {
-    padding-top: 0;
-    padding-left: 20px;
+    min-height: 350px;
+  }
+}
+
+@media (max-width: 900px) {
+  .q1-shell {
+    padding: 10px;
+  }
+
+  .hero-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .right-section {
+    flex-direction: column;
+  }
+
+  .panel-head h3 {
+    font-size: 15px;
+  }
+
+  .scatter-chart {
+    min-height: 420px;
   }
 }
 </style>
-

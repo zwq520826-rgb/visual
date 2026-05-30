@@ -33,31 +33,33 @@
       </div>
     </div>
     
-    <!-- 视图3：交互式平行坐标图 + 散点图矩阵 -->
+    <!-- 视图3：职位薪酬模式聚类图 -->
     <div class="radar-section full-width">
-      <h2>交互式多维可视化</h2>
+      <h2>职位薪酬模式聚类图</h2>
       
       <div class="api-section">
-        <InteractiveParallelCoordinates 
-          :data="parallelData?.data"
-          :loading="parallelLoading"
-          :error="parallelError"
+        <Q3DualModeViews
+          :data="clusterData?.data"
+          :loading="clusterLoading"
+          :error="clusterError || ''"
+          @reload="handleClusterReload"
         />
       </div>
     </div>
+
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useFetchData } from '@/utils/fetchData.js'
-import { get3DSalaryData, getParallelCoordinatesData } from '@/api/salary3dApi.js'
+import { get3DSalaryData, getSalaryClusters } from '@/api/salary3dApi.js'
 import Chart3D from '@/components/charts/Chart3D.vue'
 import BoxplotChart from '@/components/charts/BoxplotChart.vue'
-import InteractiveParallelCoordinates from '@/components/charts/InteractiveParallelCoordinates.vue'
+import Q3DualModeViews from '@/components/charts/Q3DualModeViews.vue'
 
 const { data: chartData, loading, error, execute } = useFetchData(get3DSalaryData)
-const { data: parallelData, loading: parallelLoading, error: parallelError, execute: executeParallel } = useFetchData(getParallelCoordinatesData)
+const { data: clusterData, loading: clusterLoading, error: clusterError, execute: executeClusters } = useFetchData(getSalaryClusters)
 const selectedExperience = ref('')
 const selectedEducation = ref('')
 const gestureEnabled = ref(false)
@@ -69,11 +71,11 @@ onMounted(async () => {
     // 并行加载所有图表的数据
     const results = await Promise.all([
       execute(),
-      executeParallel()
+      executeClusters({ nClusters: 5, algorithm: 'kmeans', sampleSize: 12000 })
     ])
     console.log('Q3Tab 数据加载完成:', {
       chart3D: chartData.value,
-      parallel: parallelData.value
+      clusters: clusterData.value
     })
     // 重置选择
     selectedExperience.value = ''
@@ -96,6 +98,18 @@ const handleBarClick = (data) => {
 
 const toggleGesture = () => {
   gestureEnabled.value = !gestureEnabled.value
+}
+
+const handleClusterReload = async (params = {}) => {
+  try {
+    await executeClusters({
+      nClusters: Number(params?.nClusters || 5),
+      algorithm: String(params?.algorithm || 'kmeans'),
+      sampleSize: Number(params?.sampleSize || 12000)
+    })
+  } catch (err) {
+    console.error('重新加载聚类数据失败:', err)
+  }
 }
 </script>
 
@@ -209,6 +223,6 @@ const toggleGesture = () => {
     padding-top: 8px;
     min-height: 500px;
   }
+
 }
 </style>
-

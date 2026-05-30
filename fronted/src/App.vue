@@ -11,38 +11,38 @@ import Dashboard from './components/Dashboard.vue'
 <style scoped>
 .app {
   min-height: 100vh;
-  background: #e2dbd6;
+  background:
+    radial-gradient(circle at 8% 0%, rgba(46, 122, 198, 0.12), transparent 30%),
+    radial-gradient(circle at 88% 2%, rgba(214, 107, 61, 0.11), transparent 28%),
+    linear-gradient(180deg, #f8fbff, #edf4fb);
   position: relative;
   overflow-x: hidden;
 }
 
-/* 添加微妙的网格背景 */
 .app::before {
   content: '';
   position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-image: 
-    linear-gradient(rgba(217, 119, 87, 0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(217, 119, 87, 0.05) 1px, transparent 1px);
-  background-size: 50px 50px;
+  top: -14%;
+  left: -8%;
+  width: 52vw;
+  height: 52vw;
+  background: radial-gradient(circle, rgba(46, 122, 198, 0.13), transparent 68%);
   pointer-events: none;
   z-index: 0;
+  filter: blur(4px);
 }
 
 .app::after {
   content: '';
   position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: radial-gradient(circle at 20% 50%, rgba(217, 119, 87, 0.08) 0%, transparent 50%),
-              radial-gradient(circle at 80% 80%, rgba(217, 119, 87, 0.05) 0%, transparent 50%);
+  right: -12%;
+  bottom: -26%;
+  width: 44vw;
+  height: 44vw;
+  background: radial-gradient(circle, rgba(214, 107, 61, 0.14), transparent 70%);
   pointer-events: none;
   z-index: 0;
+  filter: blur(8px);
 }
 
 /* 确保内容在背景之上 */
@@ -51,4 +51,3 @@ import Dashboard from './components/Dashboard.vue'
   z-index: 1;
 }
 </style>
-

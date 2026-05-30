@@ -107,7 +107,7 @@ const updateChart = () => {
   const normalizedData = normalizeData(props.selectedJobs)
   
   // 生成颜色
-  const colors = ['#5470c6', '#91cc75', '#fac858', '#ee6666', '#73c0de']
+  const colors = ['#2f6df6', '#e24a4a', '#6a8dff', '#ff7b7b', '#4f87ff']
   
   const option = {
     title: {
@@ -116,7 +116,8 @@ const updateChart = () => {
       top: 10,
       textStyle: {
         fontSize: 14,
-        fontWeight: 'bold'
+        fontWeight: 'bold',
+        color: '#2f3a4a'
       }
     },
     tooltip: {
@@ -131,7 +132,7 @@ const updateChart = () => {
             <span style="color: #666;">平均经验：</span>${(job.avg_experience || 0).toFixed(2)}（层级）<br/>
             <span style="color: #666;">平均学历：</span>${(job.avg_education || 0).toFixed(2)}（层级）<br/>
             <span style="color: #666;">招聘人数：</span>${job.job_in_city_cnt || 0}<br/>
-            <span style="color: #666;">香农熵：</span>${(job.avg_shannon_entropy || 0).toFixed(3)}<br/>
+            <span style="color: #666;">行业泛化性：</span>${(job.avg_shannon_entropy || 0).toFixed(3)}<br/>
           </div>
         `
       }
@@ -141,7 +142,8 @@ const updateChart = () => {
       left: 'center',
       data: normalizedData.map(d => d.name),
       textStyle: {
-        fontSize: 11
+        fontSize: 11,
+        color: '#2f3a4a'
       }
     },
     radar: {
@@ -150,33 +152,33 @@ const updateChart = () => {
         { name: '平均经验', max: 100 },
         { name: '平均学历', max: 100 },
         { name: '招聘人数', max: 100 },
-        { name: '薪资标准差', max: 100 },
-        { name: '香农熵', max: 100 }
-      ],
+          { name: '薪资标准差', max: 100 },
+          { name: '行业泛化性', max: 100 }
+        ],
       center: ['50%', '60%'],
       radius: '50%',
       splitNumber: 4,
       shape: 'polygon',
       name: {
         textStyle: {
-          color: '#333',
+          color: '#2f3a4a',
           fontSize: 12
         }
       },
       splitLine: {
         lineStyle: {
-          color: '#ddd'
+          color: 'rgba(110, 91, 62, 0.22)'
         }
       },
       splitArea: {
         show: true,
         areaStyle: {
-          color: ['rgba(250, 250, 250, 0.3)', 'rgba(200, 200, 200, 0.1)']
+          color: ['rgba(247, 243, 234, 0.55)', 'rgba(232, 223, 201, 0.25)']
         }
       },
       axisLine: {
         lineStyle: {
-          color: '#ccc'
+          color: 'rgba(110, 91, 62, 0.25)'
         }
       }
     },
@@ -257,40 +259,53 @@ onUnmounted(() => {
 
 <style scoped>
 .radar-comparison-chart {
+  --q1-title: #133a63;
+  --q1-muted: #5d7c9f;
   width: 100%;
   height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
+  border-radius: 10px;
+  overflow: hidden;
 }
 
 .chart-container {
   width: 100%;
   height: 100%;
-  min-height: 280px;
+  min-height: 296px;
 }
 
 .no-data-message {
   text-align: center;
-  color: #999;
-  padding: 40px 20px;
+  color: var(--q1-muted);
+  padding: 46px 20px;
+  border: 1px dashed rgba(46, 122, 198, 0.32);
+  border-radius: 12px;
+  background: linear-gradient(155deg, rgba(246, 251, 255, 0.96), rgba(237, 247, 255, 0.96));
+  width: 100%;
 }
 
 .no-data-message p {
   margin: 8px 0;
-  font-size: 14px;
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 .no-data-message p:first-child {
   font-size: 15px;
-  color: #666;
-  font-weight: 500;
+  color: var(--q1-title);
+  font-weight: 700;
 }
 
 .hint {
   font-size: 12px;
-  color: #aaa;
+  color: #2e7ac6;
+}
+
+@media (max-width: 900px) {
+  .chart-container {
+    min-height: 274px;
+  }
 }
 </style>
-
-

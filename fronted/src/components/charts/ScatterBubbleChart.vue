@@ -13,53 +13,52 @@
           <option v-for="city in cities" :key="city" :value="city">{{ city }}</option>
         </select>
       </div>
-      <div class="control-item" v-else>
-        <label>行业模式：</label>
-        <span class="mode-hint">已展示全国 160 个行业类别</span>
-      </div>
-      
       <div class="control-item">
-        <label>视图切换：</label>
-        <div class="color-mode-buttons">
-          <button 
-            :class="['mode-btn', { active: colorMode === 'job_level' }]"
-            @click="setViewMode('job_level')"
-          >
-            按城市 · 职位层级
-          </button>
-          <button 
-            :class="['mode-btn', { active: colorMode === 'industry' }]"
-            @click="setViewMode('industry')"
-          >
-            全国 · 行业类别
-          </button>
-        </div>
+        <label>视图：</label>
+        <span class="mode-hint">城市 · 职位层级</span>
+      </div>
+
+      <div class="control-item metric-group">
+        <label>X轴：</label>
+        <select v-model="xMetric" @change="updateChart" class="metric-select">
+          <option v-for="item in metricOptions" :key="`x-${item.value}`" :value="item.value">{{ item.label }}</option>
+        </select>
+      </div>
+
+      <div class="control-item metric-group">
+        <label>Y轴：</label>
+        <select v-model="yMetric" @change="updateChart" class="metric-select">
+          <option v-for="item in metricOptions" :key="`y-${item.value}`" :value="item.value">{{ item.label }}</option>
+        </select>
+      </div>
+
+      <div class="control-item metric-group">
+        <label>气泡：</label>
+        <select v-model="sizeMetric" @change="updateChart" class="metric-select">
+          <option v-for="item in sizeOptions" :key="`s-${item.value}`" :value="item.value">{{ item.label }}</option>
+        </select>
+      </div>
+
+      <div class="control-item">
+        <label class="switch-item"><input type="checkbox" v-model="showTopLabels" @change="updateChart"/> Top标注</label>
       </div>
     </div>
 
     <!-- 图例 / 提示 -->
     <div class="legend">
-      <template v-if="viewMode === 'city'">
-        <div class="legend-title">职位层级</div>
-        <div class="legend-items">
-          <div 
-            v-for="item in legendItems" 
-            :key="item.name"
-            class="legend-item"
-            @click="toggleCategory(item.name)"
-            :class="{ inactive: hiddenCategories.has(item.name) }"
-          >
-            <span class="legend-color" :style="{ backgroundColor: item.color }"></span>
-            <span class="legend-label">{{ item.name }}</span>
-          </div>
+      <div class="legend-title">职位层级</div>
+      <div class="legend-items">
+        <div 
+          v-for="item in legendItems" 
+          :key="item.name"
+          class="legend-item"
+          @click="toggleCategory(item.name)"
+          :class="{ inactive: hiddenCategories.has(item.name) }"
+        >
+          <span class="legend-color" :style="{ backgroundColor: item.color }"></span>
+          <span class="legend-label">{{ item.name }}</span>
         </div>
-      </template>
-      <template v-else>
-        <div class="legend-title">全国行业类别散点</div>
-        <p class="industry-legend-hint">
-          气泡颜色自动分配，无需手动筛选；横轴为平均经验层级，纵轴为平均薪资。
-        </p>
-      </template>
+      </div>
     </div>
 
     <!-- ECharts容器 -->
@@ -69,7 +68,7 @@
     <div v-if="selectedNodes.length > 0" class="selected-info">
       <div class="selected-header">
         <span>
-          {{ viewMode === 'city' ? '已选择 ' + selectedNodes.length + ' 个职位' : '已选择 ' + selectedNodes.length + ' 个行业' }}
+          {{ '已选择 ' + selectedNodes.length + ' 个职位' }}
         </span>
         <button @click="clearSelection" class="clear-btn">清除选择</button>
       </div>
@@ -79,22 +78,12 @@
           :key="`${node.job_title}-${node.avg_salary}-${node.avg_experience}-${index}`"
           class="selected-node"
         >
-          <template v-if="viewMode === 'city'">
-            <span class="node-title">{{ node.job_title }}</span>
-            <span class="node-info">
-              平均薪资：{{ node.avg_salary?.toFixed(2) }}K |
-              平均经验：{{ node.avg_experience?.toFixed(2) }} |
-              平均学历：{{ node.avg_education?.toFixed(2) }}
-            </span>
-          </template>
-          <template v-else>
-            <span class="node-title">{{ node.company_type }}</span>
-            <span class="node-info">
-              招聘总数：{{ node.job_count }} |
-              平均薪资：{{ node.avg_median_salary?.toFixed(2) }}K |
-              平均经验：{{ node.avg_experience_rank?.toFixed(2) }}
-            </span>
-          </template>
+          <span class="node-title">{{ node.job_title }}</span>
+          <span class="node-info">
+            平均薪资：{{ node.avg_salary?.toFixed(2) }}K |
+            平均经验：{{ node.avg_experience?.toFixed(2) }} |
+            平均学历：{{ node.avg_education?.toFixed(2) }}
+          </span>
         </div>
       </div>
     </div>
@@ -117,6 +106,11 @@ const scatterData = ref(null)
 const industryScatterData = ref(null)
 const colorMode = ref('job_level') // 'job_level' 或 'industry'
 const viewMode = computed(() => colorMode.value === 'job_level' ? 'city' : 'industry')
+const xMetric = ref('avg_experience')
+const yMetric = ref('avg_salary')
+const sizeMetric = ref('job_in_city_cnt')
+const showTopLabels = ref(false)
+const showTrendLine = ref(false)
 const hiddenCategories = ref(new Set())
 const selectedNodes = ref([])
 const chartContainer = ref(null)
@@ -124,18 +118,18 @@ let chartInstance = null
 
 // 定义配色方案
 const jobLevelColors = {
-  '平薪新人': '#5470c6',  // 蓝色
-  '基薪普及': '#91cc75',  // 绿色
-  '优薪技能': '#fac858',
-  '高新管理': '#ee6666'
+  '平薪新人': '#3b82f6',
+  '基薪普及': '#14b8a6',
+  '优薪技能': '#f59e0b',
+  '高新管理': '#ef4444'
 }
 
 // 生成行业配色（使用渐变色）
 const generateIndustryColors = (industries) => {
   const colors = [
-    '#5470c6', '#91cc75', '#fac858', '#ee6666', '#73c0de',
-    '#3ba272', '#fc8452', '#9a60b4', '#ea7ccc', '#5da8a1',
-    '#c4ccd3', '#759aa0', '#e69d87', '#8dc1a9', '#d48265'
+    '#3b82f6', '#14b8a6', '#f59e0b', '#ef4444', '#8b5cf6',
+    '#10b981', '#f97316', '#06b6d4', '#e11d48', '#6366f1',
+    '#84cc16', '#d946ef', '#0ea5e9', '#f43f5e', '#22c55e'
   ]
   const colorMap = {}
   industries.forEach((industry, index) => {
@@ -145,6 +139,47 @@ const generateIndustryColors = (industries) => {
 }
 
 const industryColors = ref({})
+
+const cityMetricOptions = [
+  { value: 'avg_experience', label: '平均经验' },
+  { value: 'avg_salary', label: '平均薪资' },
+  { value: 'avg_education', label: '平均学历' },
+  { value: 'avg_shannon_entropy', label: '香农熵' },
+  { value: 'salary_std', label: '薪资波动' }
+]
+
+const industryMetricOptions = [
+  { value: 'avg_experience_rank', label: '平均经验' },
+  { value: 'avg_median_salary', label: '平均薪资' },
+  { value: 'avg_education_rank', label: '平均学历' },
+  { value: 'avg_city_tier_score', label: '城市等级' },
+  { value: 'job_count', label: '招聘总数' }
+]
+
+const metricOptions = computed(() => viewMode.value === 'city' ? cityMetricOptions : industryMetricOptions)
+const sizeOptions = computed(() => viewMode.value === 'city'
+  ? [
+      { value: 'job_in_city_cnt', label: '招聘人数' },
+      { value: 'salary_std', label: '薪资波动' },
+      { value: 'avg_shannon_entropy', label: '香农熵' }
+    ]
+  : [
+      { value: 'job_count', label: '招聘总数' },
+      { value: 'avg_median_salary', label: '平均薪资' },
+      { value: 'avg_city_tier_score', label: '城市等级' }
+    ])
+
+const getMetricValue = (raw, key) => {
+  const value = raw?.[key]
+  return Number.isFinite(Number(value)) ? Number(value) : 0
+}
+
+const scaleSize = (value, min, max) => {
+  const v = Number(value) || 0
+  if (max <= min) return 22
+  const normalized = (v - min) / (max - min)
+  return 10 + Math.max(0, Math.min(1, normalized)) * 38
+}
 
 // 计算图例项
 const legendItems = computed(() => {
@@ -230,18 +265,22 @@ const prepareChartData = () => {
     if (!scatterData.value || !scatterData.value.data) return []
     const data = scatterData.value.data
     const groupedData = {}
+    const validData = data.filter(point => !hiddenCategories.value.has(point.job_level))
+    const sizeRawValues = validData.map(point => getMetricValue(point, sizeMetric.value))
+    const minSizeRaw = Math.min(...sizeRawValues, 0)
+    const maxSizeRaw = Math.max(...sizeRawValues, 1)
     data.forEach(point => {
       const categoryValue = point.job_level
       if (hiddenCategories.value.has(categoryValue)) return
       if (!groupedData[categoryValue]) {
         groupedData[categoryValue] = []
       }
-      groupedData[categoryValue].push({
-        value: [
-          point.avg_experience,
-          point.avg_salary,
-          point.normalized_size
-        ],
+        groupedData[categoryValue].push({
+          value: [
+            getMetricValue(point, xMetric.value),
+            getMetricValue(point, yMetric.value),
+            scaleSize(getMetricValue(point, sizeMetric.value), minSizeRaw, maxSizeRaw)
+          ],
         itemStyle: {
           color: jobLevelColors[categoryValue] || '#ccc'
         },
@@ -265,15 +304,18 @@ const prepareChartData = () => {
 
   // 行业模式：单个系列，按行业着色
   if (!industryScatterData.value || !industryScatterData.value.data) return []
+  const sizeRawValues = industryScatterData.value.data.map(item => getMetricValue(item, sizeMetric.value))
+  const minSizeRaw = Math.min(...sizeRawValues, 0)
+  const maxSizeRaw = Math.max(...sizeRawValues, 1)
   const industryPoints = industryScatterData.value.data.map(item => ({
     value: [
-      item.avg_experience_rank,
-      item.avg_median_salary,
-      item.normalized_size
+      getMetricValue(item, xMetric.value),
+      getMetricValue(item, yMetric.value),
+      scaleSize(getMetricValue(item, sizeMetric.value), minSizeRaw, maxSizeRaw)
     ],
     name: item.company_type,
     itemStyle: {
-      color: industryColors.value[item.company_type] || '#5470c6'
+      color: industryColors.value[item.company_type] || '#6e5b3e'
     },
     rawData: item
   }))
@@ -303,7 +345,41 @@ const updateChart = () => {
   if (viewMode.value === 'city' && !scatterData.value) return
   if (viewMode.value === 'industry' && !industryScatterData.value) return
   
-  const series = prepareChartData()
+  const baseSeries = prepareChartData()
+  const points = baseSeries.flatMap(s => s.data || [])
+
+  const xName = metricOptions.value.find(item => item.value === xMetric.value)?.label || 'X轴'
+  const yName = metricOptions.value.find(item => item.value === yMetric.value)?.label || 'Y轴'
+
+  const series = [...baseSeries]
+
+  if (showTopLabels.value && points.length > 0) {
+    const topPoints = [...points].sort((a, b) => (b.value?.[1] || 0) - (a.value?.[1] || 0)).slice(0, 8)
+    series.push({
+      name: 'Top标注',
+      type: 'scatter',
+      data: topPoints,
+      symbolSize: dataPoint => Math.max(14, (dataPoint?.[2] || 10) * 0.65),
+      itemStyle: {
+        color: '#ef4444',
+        borderColor: '#ffffff',
+        borderWidth: 1
+      },
+      label: {
+        show: true,
+        position: 'top',
+        color: '#1f2937',
+        fontSize: 11,
+        formatter: params => {
+          const raw = params.data?.rawData
+          return viewMode.value === 'city' ? raw?.job_title : raw?.company_type
+        }
+      },
+      silent: true
+    })
+  }
+
+  // 趋势线已移除，避免遮挡散点图
   
   const option = {
     title: {
@@ -311,7 +387,11 @@ const updateChart = () => {
         ? `${selectedCity.value} - 职位分布散点图`
         : '全国行业类别散点（160）',
       left: 'center',
-      top: 10
+      top: 10,
+      textStyle: {
+        color: '#1f2937',
+        fontWeight: 600
+      }
     },
     tooltip: {
       trigger: 'item',
@@ -369,34 +449,40 @@ const updateChart = () => {
       containLabel: true
     },
     xAxis: {
-      name: viewMode.value === 'city' ? '经验层级 (1-10)' : '平均经验层级',
+      name: xName,
       nameLocation: 'middle',
       nameGap: 30,
       type: 'value',
       // 城市模式保留原来的 0-10，行业模式聚焦在 4-6 区间，减少空白和拥挤
-      min: viewMode.value === 'city' ? 0 : 4,
-      max: viewMode.value === 'city' ? 10 : 6,
-      splitNumber: viewMode.value === 'city' ? 10 : 8,
+      min: 'dataMin',
+      max: 'dataMax',
+      splitNumber: 8,
       splitLine: {
         show: true,
         lineStyle: {
-          type: 'dashed',
-          color: '#e0e0e0'
+          type: 'solid',
+          color: 'rgba(95, 131, 174, 0.2)'
         }
-      }
+      },
+      axisLine: { lineStyle: { color: '#64748b' } },
+      axisLabel: { color: '#334155' },
+      nameTextStyle: { color: '#1f2937' }
     },
     yAxis: {
-      name: '薪资（K）',
+      name: yName,
       nameLocation: 'middle',
       nameGap: 50,
       type: 'value',
       splitLine: {
         show: true,
         lineStyle: {
-          type: 'dashed',
-          color: '#e0e0e0'
+          type: 'solid',
+          color: 'rgba(95, 131, 174, 0.2)'
         }
-      }
+      },
+      axisLine: { lineStyle: { color: '#64748b' } },
+      axisLabel: { color: '#334155' },
+      nameTextStyle: { color: '#1f2937' }
     },
     // 添加内置缩放功能（鼠标滚轮缩放和拖拽平移）
     dataZoom: [
@@ -435,9 +521,9 @@ const updateChart = () => {
         handleIcon: 'path://M30.9,53.2C16.8,53.2,5.3,41.7,5.3,27.6S16.8,2,30.9,2C45,2,56.4,13.5,56.4,27.6S45,53.2,30.9,53.2z M30.9,3.5C17.6,3.5,6.8,14.4,6.8,27.6c0,13.3,10.8,24.1,24.1,24.1C44.2,51.7,55,40.9,55,27.6C54.9,14.4,44.1,3.5,30.9,3.5z M36.9,35.8c0,0.6-0.4,1-1,1H26.8c-0.6,0-1-0.4-1-1s0.4-1,1-1h9.2C36.5,34.8,36.9,35.2,36.9,35.8z',
         handleSize: '80%',
         handleStyle: {
-          color: '#5470c6',
+          color: '#2e7ac6',
           shadowBlur: 3,
-          shadowColor: 'rgba(0, 0, 0, 0.6)',
+          shadowColor: 'rgba(47, 58, 74, 0.2)',
           shadowOffsetX: 2,
           shadowOffsetY: 2
         },
@@ -445,24 +531,24 @@ const updateChart = () => {
           color: '#333',
           fontSize: 11
         },
-        borderColor: '#5470c6',
-        fillerColor: 'rgba(84, 112, 198, 0.2)',
+        borderColor: '#2e7ac6',
+        fillerColor: 'rgba(46, 122, 198, 0.24)',
         dataBackground: {
           lineStyle: {
-            color: '#5470c6',
+            color: '#2e7ac6',
             width: 1
           },
           areaStyle: {
-            color: 'rgba(84, 112, 198, 0.1)'
+            color: 'rgba(46, 122, 198, 0.12)'
           }
         },
         selectedDataBackground: {
           lineStyle: {
-            color: '#5470c6',
+            color: '#2e7ac6',
             width: 2
           },
           areaStyle: {
-            color: 'rgba(84, 112, 198, 0.3)'
+            color: 'rgba(46, 122, 198, 0.32)'
           }
         }
       },
@@ -480,9 +566,9 @@ const updateChart = () => {
         handleIcon: 'path://M30.9,53.2C16.8,53.2,5.3,41.7,5.3,27.6S16.8,2,30.9,2C45,2,56.4,13.5,56.4,27.6S45,53.2,30.9,53.2z M30.9,3.5C17.6,3.5,6.8,14.4,6.8,27.6c0,13.3,10.8,24.1,24.1,24.1C44.2,51.7,55,40.9,55,27.6C54.9,14.4,44.1,3.5,30.9,3.5z M36.9,35.8c0,0.6-0.4,1-1,1H26.8c-0.6,0-1-0.4-1-1s0.4-1,1-1h9.2C36.5,34.8,36.9,35.2,36.9,35.8z',
         handleSize: '80%',
         handleStyle: {
-          color: '#5470c6',
+          color: '#2e7ac6',
           shadowBlur: 3,
-          shadowColor: 'rgba(0, 0, 0, 0.6)',
+          shadowColor: 'rgba(47, 58, 74, 0.2)',
           shadowOffsetX: 2,
           shadowOffsetY: 2
         },
@@ -490,24 +576,24 @@ const updateChart = () => {
           color: '#333',
           fontSize: 11
         },
-        borderColor: '#5470c6',
-        fillerColor: 'rgba(84, 112, 198, 0.2)',
+        borderColor: '#2e7ac6',
+        fillerColor: 'rgba(46, 122, 198, 0.24)',
         dataBackground: {
           lineStyle: {
-            color: '#5470c6',
+            color: '#2e7ac6',
             width: 1
           },
           areaStyle: {
-            color: 'rgba(84, 112, 198, 0.1)'
+            color: 'rgba(46, 122, 198, 0.12)'
           }
         },
         selectedDataBackground: {
           lineStyle: {
-            color: '#5470c6',
+            color: '#2e7ac6',
             width: 2
           },
           areaStyle: {
-            color: 'rgba(84, 112, 198, 0.3)'
+            color: 'rgba(46, 122, 198, 0.32)'
           }
         }
       }
@@ -529,14 +615,14 @@ const updateChart = () => {
       },
       right: 20,
       top: 10,
-      iconStyle: {
-        borderColor: '#5470c6'
-      },
+      iconStyle: { borderColor: '#2e7ac6' },
       emphasis: {
-        iconStyle: {
-          borderColor: '#5470c6'
-        }
+        iconStyle: { borderColor: '#133a63' }
       }
+    },
+    backgroundColor: '#ffffff',
+    textStyle: {
+      color: '#2f3a4a'
     },
     series: series
   }
@@ -606,6 +692,15 @@ const resetZoom = () => {
 watch(colorMode, async (mode) => {
   hiddenCategories.value = new Set()
   selectedNodes.value = []
+  if (mode === 'job_level') {
+    xMetric.value = 'avg_experience'
+    yMetric.value = 'avg_salary'
+    sizeMetric.value = 'job_in_city_cnt'
+  } else {
+    xMetric.value = 'avg_experience_rank'
+    yMetric.value = 'avg_median_salary'
+    sizeMetric.value = 'job_count'
+  }
   
   // 重置缩放状态
   resetZoom()
@@ -649,52 +744,98 @@ defineExpose({
 
 <style scoped>
 .scatter-bubble-chart {
+  --q1-surface: rgba(255, 255, 255, 0.94);
+  --q1-surface-soft: rgba(238, 247, 255, 0.82);
+  --q1-border: rgba(46, 122, 198, 0.24);
+  --q1-title: #133a63;
+  --q1-text: #2b4f76;
+  --q1-muted: #607f9f;
+  --q1-accent: #2e7ac6;
+  --q1-accent-2: #d66b3d;
   width: 100%;
   height: 100%;
   display: flex;
   flex-direction: column;
   position: relative;
+  gap: 10px;
 }
 
 .controls {
   display: flex;
-  gap: 30px;
-  padding: 15px;
-  background: #f8f9fa;
-  border-radius: 8px;
-  margin-bottom: 15px;
+  gap: 14px 18px;
+  padding: 12px 14px;
+  background: linear-gradient(160deg, var(--q1-surface), var(--q1-surface-soft));
+  border: 1px solid var(--q1-border);
+  border-radius: 12px;
+  box-shadow: 0 8px 18px rgba(43, 82, 126, 0.1);
   flex-wrap: wrap;
 }
 
 .control-item {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+}
+
+.metric-group {
+  gap: 8px;
+}
+
+.metric-select {
+  padding: 7px 10px;
+  border: 1px solid rgba(46, 122, 198, 0.34);
+  border-radius: 8px;
+  background: #fdfefe;
+  color: var(--q1-text);
+  min-width: 120px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.metric-select:focus,
+.city-select:focus {
+  outline: none;
+  border-color: var(--q1-accent);
+  box-shadow: 0 0 0 3px rgba(46, 122, 198, 0.18);
+}
+
+.switch-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--q1-text);
+  font-size: 13px;
 }
 
 .mode-hint {
-  font-size: 14px;
-  color: #666;
+  font-size: 13px;
+  color: var(--q1-muted);
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px dashed rgba(46, 122, 198, 0.26);
+  background: rgba(250, 253, 255, 0.88);
 }
 
 .control-item label {
-  font-weight: 500;
-  color: #333;
+  font-weight: 700;
+  color: var(--q1-title);
+  font-size: 12px;
   white-space: nowrap;
 }
 
 .city-select {
-  padding: 6px 12px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  background: white;
-  font-size: 14px;
+  padding: 7px 12px;
+  border: 1px solid rgba(46, 122, 198, 0.34);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--q1-text);
+  font-size: 13px;
   cursor: pointer;
   min-width: 150px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .city-select:hover {
-  border-color: #5470c6;
+  border-color: var(--q1-accent);
 }
 
 .color-mode-buttons {
@@ -704,41 +845,44 @@ defineExpose({
 
 .mode-btn {
   padding: 6px 16px;
-  border: 1px solid #ddd;
-  background: white;
-  border-radius: 4px;
+  border: 1px solid rgba(46, 122, 198, 0.24);
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 8px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 13px;
   transition: all 0.3s;
+  color: var(--q1-text);
 }
 
 .mode-btn:hover {
-  border-color: #5470c6;
-  color: #5470c6;
+  border-color: var(--q1-accent);
+  color: var(--q1-accent);
 }
 
 .mode-btn.active {
-  background: #5470c6;
-  color: white;
-  border-color: #5470c6;
+  background: linear-gradient(135deg, #1e5e9d, #2e7ac6);
+  color: #f4fbff;
+  border-color: #2e7ac6;
+  font-weight: 700;
 }
 
 .legend {
-  padding: 10px 15px;
-  background: #f8f9fa;
-  border-radius: 8px;
-  margin-bottom: 15px;
+  padding: 10px 12px;
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.93), rgba(241, 249, 255, 0.9));
+  border: 1px solid var(--q1-border);
+  border-radius: 12px;
 }
 
 .legend-title {
-  font-weight: 600;
-  color: #333;
-  margin-bottom: 10px;
+  font-weight: 700;
+  color: var(--q1-title);
+  margin-bottom: 8px;
+  font-size: 13px;
 }
 
 .industry-legend-hint {
-  font-size: 13px;
-  color: #666;
+  font-size: 12px;
+  color: var(--q1-muted);
   margin: 0;
 }
 
@@ -753,18 +897,20 @@ defineExpose({
   align-items: center;
   gap: 6px;
   padding: 4px 10px;
-  border-radius: 4px;
+  border-radius: 999px;
   cursor: pointer;
-  transition: all 0.3s;
-  background: white;
+  transition: all 0.24s ease;
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(46, 122, 198, 0.2);
 }
 
 .legend-item:hover {
-  background: #e9ecef;
+  background: rgba(231, 243, 255, 0.8);
+  transform: translateY(-1px);
 }
 
 .legend-item.inactive {
-  opacity: 0.3;
+  opacity: 0.45;
 }
 
 .legend-color {
@@ -775,82 +921,154 @@ defineExpose({
 }
 
 .legend-label {
-  font-size: 13px;
-  color: #555;
+  font-size: 12px;
+  color: var(--q1-text);
 }
 
 .chart-container {
   flex: 1;
-  min-height: 400px;
-  border: 1px solid #e0e0e0;
-  border-radius: 8px;
-  background: white;
+  min-height: 420px;
+  border: 1px solid var(--q1-border);
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.8);
 }
 
 .selected-info {
   position: absolute;
-  top: 80px;
-  right: 20px;
-  width: 280px;
+  top: 104px;
+  right: 14px;
+  width: 300px;
   max-height: 400px;
-  background: white;
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(46, 122, 198, 0.3);
+  border-radius: 12px;
+  box-shadow: 0 16px 30px rgba(30, 77, 126, 0.18);
   overflow: hidden;
   z-index: 10;
+  backdrop-filter: blur(8px);
+  animation: slideInPanel 0.28s ease;
 }
 
 .selected-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 15px;
-  background: #5470c6;
-  color: white;
-  font-weight: 500;
+  padding: 12px;
+  background: linear-gradient(140deg, #1f5f9d, #2d7cc8);
+  color: #f5fbff;
+  font-weight: 700;
+  font-size: 13px;
 }
 
 .clear-btn {
-  padding: 4px 12px;
-  background: white;
-  color: #5470c6;
-  border: none;
-  border-radius: 4px;
+  padding: 5px 10px;
+  background: rgba(255, 255, 255, 0.94);
+  color: #194f84;
+  border: 1px solid rgba(29, 90, 146, 0.22);
+  border-radius: 999px;
   cursor: pointer;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 700;
+  transition: background 0.2s ease, transform 0.2s ease;
 }
 
 .clear-btn:hover {
-  background: #f0f0f0;
+  background: #ffffff;
+  transform: translateY(-1px);
 }
 
 .selected-list {
-  max-height: 340px;
+  max-height: 338px;
   overflow-y: auto;
-  padding: 10px;
+  padding: 10px 10px 6px;
 }
 
 .selected-node {
-  padding: 10px;
+  padding: 9px 10px;
   margin-bottom: 8px;
-  background: #f8f9fa;
-  border-radius: 4px;
-  border-left: 3px solid #5470c6;
+  background: linear-gradient(155deg, #f9fcff, #eff7ff);
+  border-radius: 8px;
+  border-left: 3px solid var(--q1-accent-2);
+  border-right: 1px solid rgba(46, 122, 198, 0.18);
 }
 
 .node-title {
   display: block;
-  font-weight: 500;
-  color: #333;
-  margin-bottom: 4px;
+  font-weight: 700;
+  color: #1c4268;
+  margin-bottom: 2px;
+  line-height: 1.4;
 }
 
 .node-info {
   display: block;
   font-size: 12px;
-  color: #666;
+  color: #557492;
+  line-height: 1.5;
+}
+
+@keyframes slideInPanel {
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@media (max-width: 1320px) {
+  .selected-info {
+    position: static;
+    width: 100%;
+    max-height: none;
+  }
+}
+
+@media (max-width: 1024px) {
+  .controls {
+    padding: 10px;
+  }
+
+  .chart-container {
+    min-height: 390px;
+  }
+}
+
+@media (max-width: 760px) {
+  .scatter-bubble-chart {
+    gap: 8px;
+  }
+
+  .controls {
+    gap: 10px;
+    border-radius: 10px;
+  }
+
+  .control-item {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .metric-select,
+  .city-select {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .legend-items {
+    gap: 8px;
+  }
+
+  .chart-container {
+    min-height: 360px;
+    border-radius: 10px;
+  }
+
+  .selected-header {
+    padding: 10px;
+  }
 }
 </style>
-

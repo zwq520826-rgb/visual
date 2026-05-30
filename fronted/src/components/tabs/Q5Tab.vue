@@ -1,11 +1,20 @@
 <template>
-  <div class="q5-tab">
+  <section class="q5-tab">
+    <header class="q5-hero">
+      <div>
+        <h2>Q5 新兴职业扩散与行业引力网络</h2>
+        <p>融合多维岗位排行、行业玫瑰与星云网络，追踪职业破壁路径与核心枢纽。</p>
+      </div>
+      <div class="hero-page-chip">当前页面：第 {{ currentPage }} / 2 页</div>
+    </header>
+
+    <div class="q5-workspace">
     <!-- 第 1 页：两个图表并排显示 -->
-    <div v-if="currentPage === 1">
+    <div v-if="currentPage === 1" class="page-block">
       <div class="charts-container">
         <!-- 视图1：Math-Based 多维 Icon 柱状图 -->
         <div class="chart-section chart-left">
-          <h2>Math-Based 多维 Icon 柱状图</h2>
+          <h3>Math-Based 多维 Icon 柱状图</h3>
           
           <div class="api-section">
             <div v-if="error" class="error-message">
@@ -31,7 +40,7 @@
 
         <!-- 视图2：连续型进度条图 -->
         <div class="chart-section chart-right">
-          <h2>Math-Based 多维进度条图（连续型）</h2>
+          <h3>Math-Based 多维进度条图（连续型）</h3>
           
           <div class="api-section">
             <div v-if="error" class="error-message">
@@ -55,12 +64,85 @@
           </div>
         </div>
       </div>
+
+      <div class="chart-section chart-full force-inline-first-page">
+        <h3>引力网络图：行业破壁与核心枢纽</h3>
+
+        <div v-if="forceJobsError" class="error-message">
+          <p>加载失败: {{ forceJobsError }}</p>
+        </div>
+        <div v-if="forceAtlasError" class="error-message">
+          <p>网络图加载失败: {{ forceAtlasError }}</p>
+        </div>
+
+        <div class="force-top-console">
+          <button
+            v-for="(job, idx) in forceJobs"
+            :key="job.job_title"
+            class="force-job-card"
+            :class="{ active: job.job_title === activeForceJobTitle }"
+            @click="selectForceJob(job.job_title)"
+          >
+            <div class="force-job-icon">{{ idx + 1 }}</div>
+            <div class="force-job-title">{{ job.job_title }}</div>
+            <div class="force-job-metrics">
+              <span>需求量</span>
+              <b>{{ formatNum(job.records_count) }} 岗</b>
+            </div>
+            <div class="force-job-metrics">
+              <span>学历门槛</span>
+              <b>{{ job.education_label || '-' }}</b>
+            </div>
+            <div class="force-job-metrics">
+              <span>经验门槛</span>
+              <b>{{ job.experience_label || '-' }}</b>
+            </div>
+          </button>
+
+          <div v-if="forceJobsLoading" class="force-card-loading">正在加载前5新兴职业...</div>
+        </div>
+
+        <div class="force-controls">
+          <label>城市等级：</label>
+          <select v-model="forceTier">
+            <option value="all">全部</option>
+            <option value="first_tier">一线</option>
+            <option value="second_tier">二线</option>
+            <option value="third_tier">三线</option>
+            <option value="other">其他</option>
+          </select>
+
+          <label>行业节点上限：</label>
+          <input v-model.number="forceTopKIndustry" type="range" min="10" max="15" step="1" />
+          <span>{{ forceTopKIndustry }}</span>
+        </div>
+
+        <div class="force-summary-panel" v-if="activeForceNetwork?.summary">
+          <div class="force-kpi"><span>核心岗位</span><b>{{ activeForceJob?.job_title || activeForceNetwork.job_title }}</b></div>
+          <div class="force-kpi"><span>岗位需求量</span><b>{{ formatNum(activeForceNetwork.summary.job_total_count) }}</b></div>
+          <div class="force-kpi"><span>行业覆盖度</span><b>{{ activeForceNetwork.summary.industry_degree }}</b></div>
+          <div class="force-kpi"><span>核心/星尘</span><b>{{ activeForceNetwork.summary.industry_degree_core }}/{{ activeForceNetwork.summary.industry_degree_dust }}</b></div>
+          <div class="force-kpi"><span>破壁熵</span><b>{{ formatFloat(activeForceNetwork.summary.industry_entropy, 3) }}</b></div>
+          <div class="force-kpi"><span>枢纽分</span><b>{{ formatFloat(activeForceNetwork.summary.hub_score, 3) }}</b></div>
+        </div>
+
+        <div class="force-map-wrapper">
+          <div v-if="forceAtlasLoading" class="force-map-loading">正在加载 5 个引力图...</div>
+          <Q5ForceAtlasGraph
+            v-else
+            :networks="forceAtlasNetworks"
+            :activeJobTitle="activeForceJobTitle"
+            :loading="false"
+            :error="forceAtlasError"
+          />
+        </div>
+      </div>
     </div>
 
     <!-- 第 2 页：行业双环嵌套玫瑰极坐标图（ECharts） -->
-    <div v-else-if="currentPage === 2">
+    <div v-else-if="currentPage === 2" class="page-block">
       <div class="chart-section chart-full">
-        <h2>行业双环嵌套玫瑰极坐标图</h2>
+        <h3>行业双环嵌套玫瑰极坐标图</h3>
 
         <div class="api-section">
           <!--<button class="btn" @click="handleLoadIndustryRose" :disabled="roseLoading">
@@ -222,6 +304,7 @@
         </div>
       </div>
     </div>
+    </div>
 
     <!-- 分页按钮 -->
     <div class="pager">
@@ -229,7 +312,7 @@
       <span class="page-indicator">第 {{ currentPage }} / 2 页</span>
       <button class="btn" :disabled="currentPage === 2" @click="goNext">下一页</button>
     </div>
-  </div>
+  </section>
 </template>
 
 <script setup>
@@ -237,11 +320,13 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { useFetchData, useCachedFetchData } from '@/utils/fetchData.js'
 import { getJobRanking } from '@/api/industryApi.js'
 import { getIndustryTrendRose } from '@/api/industryApi.js'
+import { getQ5ForceEmergingJobs, getQ5ForceJobNetwork } from '@/api/industryApi.js'
 import MultiIconBarChart from '@/components/charts/MultiIconBarChart.vue'
 import ContinuousProgressBarChart from '@/components/charts/ContinuousProgressBarChart.vue'
 import * as d3 from 'd3'
 import RoseNestedPolar from '@/components/charts/RoseNestedPolar.vue'
 import IndustryNebula from '@/components/charts/IndustryNebula.vue'
+import Q5ForceAtlasGraph from '@/components/charts/Q5ForceAtlasGraph.vue'
 
 const currentPage = ref(1)
 const goPrev = () => {
@@ -278,6 +363,7 @@ onMounted(() => {
   // 如果在第1页，自动加载职位排名数据
   if (currentPage.value === 1) {
     handleLoadChart()
+    autoLoadForceData()
   }
   // 如果在第2页，自动加载玫瑰图数据
   if (currentPage.value === 2) {
@@ -287,6 +373,54 @@ onMounted(() => {
 
 const { data: chartData, loading, error, execute } = useCachedFetchData(getJobRanking, 'jobRankingData', 7 * 24 * 60 * 60 * 1000) // 7天缓存
 const { data: roseData, loading: roseLoading, error: roseError, execute: executeRose } = useFetchData(getIndustryTrendRose)
+const { data: forceJobsData, loading: forceJobsLoading, error: forceJobsError, execute: executeForceJobs } = useFetchData(getQ5ForceEmergingJobs)
+
+const forceTier = ref('all')
+const forceTopKIndustry = ref(12)
+const activeForceJobTitle = ref('')
+const forceJobs = computed(() => forceJobsData.value?.data?.jobs || [])
+const activeForceJob = computed(() => forceJobs.value.find(j => j.job_title === activeForceJobTitle.value) || null)
+const forceAtlasLoading = ref(false)
+const forceAtlasError = ref('')
+const forceNetworkByJob = ref({})
+
+const activeForceNetwork = computed(() => {
+  if (!activeForceJobTitle.value) return null
+  return forceNetworkByJob.value[activeForceJobTitle.value] || null
+})
+
+const forceAtlasNetworks = computed(() => {
+  const jobs = forceJobs.value
+  if (!jobs.length) return []
+  const scores = jobs.map(j => Number(j.composite_score) || 0)
+  const minScore = Math.min(...scores)
+  const maxScore = Math.max(...scores)
+  const span = Math.max(maxScore - minScore, 1e-9)
+
+  return jobs.map((job) => {
+    const network = forceNetworkByJob.value[job.job_title]
+    if (!network) return null
+    const score = Number(job.composite_score) || 0
+    const t = (score - minScore) / span
+    const centerScale = 1.0 + t * 0.65
+    const leafScale = 0.9 + t * 0.25
+    const nodes = Array.isArray(network.nodes)
+      ? network.nodes.map((n) => {
+          const isCenter = n.type === 'job'
+          const base = Number(n.symbolSize || (isCenter ? 56 : 26))
+          const factor = isCenter ? centerScale : leafScale
+          return {
+            ...n,
+            symbolSize: Math.round(base * factor * 100) / 100
+          }
+        })
+      : []
+    return {
+      ...network,
+      nodes
+    }
+  }).filter(Boolean)
+})
 
 const handleLoadChart = async () => {
   try {
@@ -305,6 +439,59 @@ const handleLoadIndustryRose = async () => {
     console.error('加载行业玫瑰图数据失败:', err)
   }
 }
+
+const loadForceAtlasNetworks = async () => {
+  const jobs = forceJobs.value
+  if (!jobs.length) return
+  forceAtlasLoading.value = true
+  forceAtlasError.value = ''
+  try {
+    const pairs = await Promise.all(
+      jobs.map(async (job) => {
+        const res = await getQ5ForceJobNetwork(job.job_title, forceTopKIndustry.value, forceTier.value)
+        return [job.job_title, res?.data || null]
+      })
+    )
+    const map = {}
+    pairs.forEach(([title, data]) => {
+      if (data) map[title] = data
+    })
+    forceNetworkByJob.value = map
+    if (!activeForceJobTitle.value && jobs.length) {
+      activeForceJobTitle.value = jobs[0].job_title
+    }
+  } catch (err) {
+    forceAtlasError.value = err?.message || '加载引力图失败'
+    console.error('加载引力图集合失败:', err)
+  } finally {
+    forceAtlasLoading.value = false
+  }
+}
+
+const autoLoadForceData = async () => {
+  try {
+    if (!forceJobs.value.length) {
+      await executeForceJobs(5)
+    }
+    if (!activeForceJobTitle.value && forceJobs.value.length) {
+      activeForceJobTitle.value = forceJobs.value[0].job_title
+    }
+    await loadForceAtlasNetworks()
+  } catch (err) {
+    console.error('自动加载 Q5 引力图数据失败:', err)
+  }
+}
+
+const selectForceJob = async (jobTitle) => {
+  if (!jobTitle) return
+  activeForceJobTitle.value = jobTitle
+}
+
+watch([forceTier, forceTopKIndustry], async () => {
+  if (currentPage.value === 1 && forceJobs.value.length) {
+    await loadForceAtlasNetworks()
+  }
+})
 
 // compute top two industries by job count for default display
 const topTwo = computed(() => {
@@ -465,18 +652,81 @@ function getEmergingJobs(industry) {
 
 <style scoped>
 .q5-tab {
+  --q5-border: rgba(80, 111, 174, 0.14);
+  --q5-text-main: #10315d;
+  --q5-text-sub: #58739a;
   width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px;
+  border-radius: 16px;
+  background: radial-gradient(circle at 12% 12%, #f3f7ff 0%, #eef3fb 35%, #e9eef8 100%);
+}
+
+.q5-hero,
+.q5-workspace {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid var(--q5-border);
+  border-radius: 14px;
+  box-shadow: 0 8px 20px rgba(64, 89, 138, 0.08);
+}
+
+.q5-hero {
+  padding: 16px 18px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.q5-hero h2 {
+  margin: 0;
+  color: var(--q5-text-main);
+  font-size: 28px;
+  line-height: 1.2;
+}
+
+.q5-hero p {
+  margin: 8px 0 0;
+  color: var(--q5-text-sub);
+  font-size: 14px;
+}
+
+.hero-page-chip {
+  color: #2e507f;
+  background: #eef4ff;
+  border: 1px solid #d1dff5;
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.q5-workspace {
+  padding: 12px;
+}
+
+.page-block {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .charts-container {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 20px;
   width: 100%;
 }
 
 .chart-section {
-  flex: 1;
-  min-width: 0; /* 防止flex子项溢出 */
+  min-width: 0;
+  border: 1px solid #d9e4f6;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #ffffff 0%, #f9fcff 100%);
+  padding: 12px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
 }
 
 .chart-left,
@@ -485,7 +735,10 @@ function getEmergingJobs(industry) {
   flex-direction: column;
 }
 .chart-full {
-  margin-top: 30px;
+  margin-top: 6px;
+}
+.force-inline-first-page {
+  margin-top: 6px;
 }
 .nebula-container {
   display: flex;
@@ -543,10 +796,10 @@ function getEmergingJobs(industry) {
   user-select: none !important;
 }
 
-.q5-tab h2 {
-  margin-bottom: 20px;
-  color: #2c3e50;
-  font-size: 24px;
+.chart-section > h3 {
+  margin: 0 0 10px;
+  color: #153a6a;
+  font-size: 22px;
 }
 
 .chart-description {
@@ -562,7 +815,7 @@ function getEmergingJobs(industry) {
 }
 
 .api-section {
-  margin-top: 20px;
+  margin-top: 8px;
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -570,19 +823,21 @@ function getEmergingJobs(industry) {
 
 
 .btn {
-  padding: 10px 20px;
-  background: #5470c6;
+  padding: 9px 14px;
+  background: linear-gradient(135deg, #2f6df6 0%, #1b57dc 100%);
   color: white;
   border: none;
-  border-radius: 4px;
+  border-radius: 10px;
   font-size: 14px;
   cursor: pointer;
-  transition: background 0.3s;
-  margin-bottom: 20px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  margin-bottom: 12px;
+  box-shadow: 0 6px 14px rgba(47, 109, 246, 0.24);
 }
 
 .btn:hover:not(:disabled) {
-  background: #4558a3;
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(47, 109, 246, 0.3);
 }
 
 .btn:disabled {
@@ -607,24 +862,152 @@ function getEmergingJobs(industry) {
 }
 
 .pager {
-  margin-top: 24px;
+  margin-top: 2px;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 12px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid var(--q5-border);
+  border-radius: 12px;
+  padding: 10px;
 }
 
 .page-indicator {
-  color: #666;
+  color: #3d5f8c;
+  font-size: 13px;
+  font-weight: 700;
+}
+.force-top-console {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.force-job-card {
+  border: 1px solid rgba(122, 159, 214, 0.24);
+  border-radius: 14px;
+  padding: 12px;
+  text-align: left;
+  background: linear-gradient(160deg, rgba(236, 244, 255, 0.96) 0%, rgba(246, 250, 255, 0.96) 100%);
+  color: #173654;
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+.force-job-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 18px rgba(47, 97, 166, 0.14);
+}
+.force-job-card.active {
+  border-color: rgba(66, 135, 245, 0.88);
+  background: linear-gradient(155deg, rgba(12, 34, 61, 0.98) 0%, rgba(20, 55, 94, 0.98) 100%);
+  color: #e2efff;
+  box-shadow: 0 12px 20px rgba(16, 45, 84, 0.32);
+}
+.force-job-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  margin-bottom: 8px;
+  background: rgba(98, 145, 223, 0.2);
+}
+.force-job-card.active .force-job-icon {
+  background: rgba(120, 200, 255, 0.24);
+  box-shadow: 0 0 14px rgba(120, 200, 255, 0.42);
+}
+.force-job-title {
+  font-weight: 700;
+  font-size: 13px;
+  word-break: break-all;
+  margin-bottom: 8px;
+}
+.force-job-metrics {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12px;
+  margin-top: 4px;
+}
+.force-job-metrics span {
+  opacity: 0.8;
+}
+.force-job-metrics b {
+  font-size: 12px;
+}
+.force-card-loading {
+  grid-column: 1 / -1;
+  font-size: 13px;
+  color: #5f7598;
+}
+.force-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  color: #425a77;
+  font-size: 13px;
+}
+.force-controls select {
+  border: 1px solid #d2dff0;
+  border-radius: 8px;
+  padding: 4px 8px;
+  background: #f8fbff;
+}
+.force-summary-panel {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.force-kpi {
+  background: linear-gradient(165deg, rgba(11, 30, 54, 0.96) 0%, rgba(19, 51, 84, 0.96) 100%);
+  border: 1px solid rgba(120, 165, 227, 0.32);
+  border-radius: 12px;
+  padding: 8px 10px;
+  color: #d9e8ff;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.force-kpi span {
+  font-size: 11px;
+  opacity: 0.8;
+}
+.force-kpi b {
+  font-size: 14px;
+  font-weight: 700;
+  word-break: break-all;
+}
+.force-map-wrapper {
+  margin-top: 6px;
+}
+.force-map-loading {
+  min-height: 560px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #516987;
   font-size: 14px;
 }
 @media (max-width: 900px) {
+  .q5-hero {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .charts-container { grid-template-columns: 1fr; }
   .rose-section { flex-direction: column; }
   .top-cards-sidebar { flex: none; width: 100%; flex-direction: row; gap: 12px; }
   .top-card-small { flex: 1; }
   .rose-wrapper { flex: none; width: 100%; }
   .nebula-row { flex-direction: column; }
   .info-panel { width: 100%; max-height: none; }
+  .force-top-console { grid-template-columns: 1fr; }
+  .force-summary-panel { grid-template-columns: 1fr 1fr; }
+  .force-controls { flex-wrap: wrap; }
 }
 .rose-wrapper.rose-transitioning {
   transform-origin: center;
@@ -640,4 +1023,3 @@ function getEmergingJobs(industry) {
   z-index: 60;
 }
 </style>
-

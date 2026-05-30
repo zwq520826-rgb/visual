@@ -54,3 +54,10 @@ export async function getParallelCoordinatesData() {
   return await apiClient.get('/charts/parallel-coordinates')
 }
 
+export async function getSalaryClusters({ nClusters = 5, algorithm = 'gmm', sampleSize = 12000 } = {}) {
+  const params = new URLSearchParams()
+  params.append('n_clusters', String(nClusters))
+  params.append('algorithm', String(algorithm || 'gmm'))
+  params.append('sample_size', String(sampleSize))
+  return await apiClient.get(`/charts/salary-clusters?${params.toString()}`)
+}

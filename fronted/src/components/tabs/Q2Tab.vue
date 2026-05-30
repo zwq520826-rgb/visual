@@ -1,1630 +1,1715 @@
 <template>
-  <div class="q2-tab">
-    <div class="page-header">
-      <h2>职位画像分析</h2>
-      <div class="layout-toggle">
-        <button 
-          :class="['layout-btn', { active: layoutMode === 'grid' }]"
-          @click="layoutMode = 'grid'"
-          title="网格布局"
-        >
-          <span>⊞</span> 网格
-        </button>
-        <button 
-          :class="['layout-btn', { active: layoutMode === 'tabs' }]"
-          @click="layoutMode = 'tabs'"
-          title="标签页布局"
-        >
-          <span>☰</span> 标签
+  <section class="q2-layout">
+    <header class="hero-card">
+      <div>
+        <h2>
+          <span class="title-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none">
+              <path d="M4 19.2V4.8M10.4 19.2V10.4M16.8 19.2V7.2M3 19.2H21" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </span>
+          Q2 职位画像分析 · 三主视图排版方案
+        </h2>
+        <p>支持最多三组职位对比，整合轮廓对比、路径解析与城市偏好分布。</p>
+      </div>
+      <div class="hero-actions">
+        <label class="period-picker">
+          <span class="picker-label">
+            <span class="inline-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none">
+                <rect x="3.5" y="5.5" width="17" height="15" rx="2.5" stroke="currentColor" stroke-width="1.8"/>
+                <path d="M8 3.5V7M16 3.5V7M3.5 10H20.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+              </svg>
+            </span>
+            分析周期
+          </span>
+          <select v-model="analysisPeriod">
+            <option value="2024Q1">2024 Q1</option>
+            <option value="2024Q2">2024 Q2</option>
+            <option value="2024Q3">2024 Q3</option>
+          </select>
+        </label>
+        <button class="ghost-btn" type="button">
+          <span class="btn-inline">
+            <span class="inline-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none">
+                <path d="M12 4V14.5M12 14.5L8.2 10.7M12 14.5L15.8 10.7M4 18.5H20" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </span>
+            导出报告
+          </span>
         </button>
       </div>
-    </div>
-    
-    <!-- 标签页模式 -->
-    <div v-if="layoutMode === 'tabs'" class="view-tabs">
-      <button 
-        :class="['view-tab', { active: currentView === 'parallel' }]"
-        @click="currentView = 'parallel'"
-      >
-        视图一：平行坐标图
-      </button>
-      <button 
-        :class="['view-tab', { active: currentView === 'sankey' }]"
-        @click="currentView = 'sankey'"
-      >
-        视图二：桑基图
-      </button>
-      <button 
-        :class="['view-tab', { active: currentView === 'nested' }]"
-        @click="currentView = 'nested'"
-      >
-        视图三：嵌套柱状图
-      </button>
-    </div>
-    
-    <!-- 网格布局模式 -->
-    <div v-if="layoutMode === 'grid'" class="grid-layout-wrapper">
-      <!-- 统一职位选择器 -->
-      <div class="unified-job-selector">
-        <div class="selector-header">
-          <h3>🎯 统一职位选择</h3>
-          <p class="selector-hint">在此输入职位，自动同步到所有视图</p>
-        </div>
-        <div class="selector-body">
-          <div class="unified-inputs">
-            <div class="input-group">
-              <label>职位1</label>
-              <div class="unified-input">
-                <CustomSelect 
-                  v-model="unifiedJobs[0]" 
-                  :options="jobTitlesList"
-                  placeholder="输入或选择职位"
-                  :max-visible="100"
-                />
-              </div>
-            </div>
-            <div class="input-group">
-              <label>职位2</label>
-              <div class="unified-input">
-                <CustomSelect 
-                  v-model="unifiedJobs[1]" 
-                  :options="jobTitlesList"
-                  placeholder="输入或选择职位"
-                  :max-visible="100"
-                />
-              </div>
-            </div>
-            <div class="input-group">
-              <label>职位3</label>
-              <div class="unified-input">
-                <CustomSelect 
-                  v-model="unifiedJobs[2]" 
-                  :options="jobTitlesList"
-                  placeholder="输入或选择职位"
-                  :max-visible="100"
-                />
-              </div>
-            </div>
-          </div>
-          <div class="unified-actions">
-            <button @click="syncToAllViews" :disabled="!hasUnifiedJobs" class="unified-btn unified-btn-sync">
-              <span>🔄</span> 同步到所有视图
-            </button>
-            <button @click="loadAllViews" :disabled="!hasUnifiedJobs" class="unified-btn unified-btn-load">
-              <span>⚡</span> 一键生成全部
-            </button>
-            <button @click="clearAllJobs" class="unified-btn unified-btn-clear">
-              <span>🗑️</span> 清空全部
-            </button>
-          </div>
-        </div>
-      </div>
+    </header>
 
-      <!-- 三个视图 -->
-      <div class="grid-layout">
-      <!-- 视图一：平行坐标图 -->
-      <div class="grid-item">
-        <div class="grid-header">
-          <span class="grid-title">📊 平行坐标图</span>
-          <button class="expand-btn" @click="expandView('parallel')" title="展开">⤢</button>
-        </div>
-        <div class="grid-content-compact">
-          <div class="compact-controls">
-            <div class="compact-inputs">
-              <div class="draggable-input-wrapper">
-                <CustomSelect 
-                  v-model="selectedJobs[0]" 
-                  :options="jobTitlesList"
-                  placeholder="职位1"
-                  :max-visible="100"
-                />
-              </div>
-              <div class="draggable-input-wrapper">
-                <CustomSelect 
-                  v-model="selectedJobs[1]" 
-                  :options="jobTitlesList"
-                  placeholder="职位2"
-                  :max-visible="100"
-                />
-              </div>
-              <div class="draggable-input-wrapper">
-                <CustomSelect 
-                  v-model="selectedJobs[2]" 
-                  :options="jobTitlesList"
-                  placeholder="职位3"
-                  :max-visible="100"
-                />
-              </div>
-            </div>
-            <div class="compact-actions">
-              <button @click="loadData" :disabled="!hasValidJobs" class="compact-btn compact-btn-primary">生成</button>
-              <button @click="clearSelection" class="compact-btn compact-btn-secondary">清除</button>
-            </div>
-          </div>
-          <div class="compact-chart">
-            <PositionParallelChart 
-              :data="chartData?.data"
-              :loading="loading"
-              :error="error"
-            />
-          </div>
-        </div>
+    <section class="selector-card">
+      <div class="selector-title">
+        <span class="inline-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none">
+            <path d="M8 5.2H20M8 12H20M8 18.8H20" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            <circle cx="5" cy="5.2" r="1.8" fill="currentColor"/>
+            <circle cx="5" cy="12" r="1.8" fill="currentColor"/>
+            <circle cx="5" cy="18.8" r="1.8" fill="currentColor"/>
+          </svg>
+        </span>
+        职位选择（最多3个）
       </div>
-      
-      <!-- 视图二：桑基图 -->
-      <div class="grid-item">
-        <div class="grid-header">
-          <span class="grid-title">🔀 桑基图</span>
-          <button class="expand-btn" @click="expandView('sankey')" title="展开">⤢</button>
-        </div>
-        <div class="grid-content-compact">
-          <div class="compact-controls">
-            <div class="compact-mode">
-              <label><input type="radio" v-model="sankeyMode" value="all" @change="handleModeChange" /> 整体</label>
-              <label><input type="radio" v-model="sankeyMode" value="compare" @change="handleModeChange" /> 对比</label>
-            </div>
-            <div v-if="sankeyMode === 'compare'" class="compact-inputs">
-              <div class="draggable-input-wrapper">
-                <CustomSelect 
-                  v-model="sankeyJobs[0]" 
-                  :options="jobTitlesList"
-                  placeholder="职位1"
-                  :max-visible="100"
-                />
-              </div>
-              <div class="draggable-input-wrapper">
-                <CustomSelect 
-                  v-model="sankeyJobs[1]" 
-                  :options="jobTitlesList"
-                  placeholder="职位2"
-                  :max-visible="100"
-                />
-              </div>
-              <div class="draggable-input-wrapper">
-                <CustomSelect 
-                  v-model="sankeyJobs[2]" 
-                  :options="jobTitlesList"
-                  placeholder="职位3"
-                  :max-visible="100"
-                />
-              </div>
-            </div>
-            <div class="compact-actions">
-              <button @click="loadSankeyData" class="compact-btn compact-btn-primary">生成</button>
-              <button @click="clearSankeySelection" class="compact-btn compact-btn-secondary">清除</button>
-            </div>
-          </div>
-          <div class="compact-chart">
-            <SankeyChart 
-              :data="sankeyData?.data"
-              :loading="sankeyLoading"
-              :error="sankeyError"
-            />
-          </div>
-        </div>
-      </div>
-      
-      <!-- 视图三：嵌套柱状图 -->
-      <div class="grid-item grid-item-full">
-        <div class="grid-header">
-          <span class="grid-title">📈 嵌套柱状图</span>
-          <button class="expand-btn" @click="expandView('nested')" title="展开">⤢</button>
-        </div>
-        <div class="grid-content-compact grid-content-wide">
-          <div class="compact-controls">
-            <div class="compact-inputs">
-              <div class="draggable-input-wrapper">
-                <CustomSelect 
-                  v-model="nestedJobs[0]" 
-                  :options="jobTitlesList"
-                  placeholder="职位1"
-                  :max-visible="100"
-                />
-              </div>
-              <div class="draggable-input-wrapper">
-                <CustomSelect 
-                  v-model="nestedJobs[1]" 
-                  :options="jobTitlesList"
-                  placeholder="职位2"
-                  :max-visible="100"
-                />
-              </div>
-              <div class="draggable-input-wrapper">
-                <CustomSelect 
-                  v-model="nestedJobs[2]" 
-                  :options="jobTitlesList"
-                  placeholder="职位3"
-                  :max-visible="100"
-                />
-              </div>
-            </div>
-            <div class="compact-actions">
-              <button @click="loadNestedData(null)" :disabled="!hasValidNestedJobs" class="compact-btn compact-btn-primary">生成</button>
-              <button v-if="selectedDetailJob" @click="backToMacro" class="compact-btn compact-btn-warning">返回宏观</button>
-              <button @click="clearNestedSelection" class="compact-btn compact-btn-secondary">清除</button>
-            </div>
-          </div>
-          <div class="compact-chart">
-            <NestedBarChart 
-              :data="nestedData?.data"
-              :loading="nestedLoading"
-              :error="nestedError"
-              @selectJob="handleSelectDetailJob"
-            />
-          </div>
-        </div>
-      </div>
-    </div>
-    </div>
-    
-    <!-- 标签页模式 - 视图一：平行坐标图 -->
-    <div v-if="layoutMode === 'tabs' && currentView === 'parallel'" class="view-content">
-      <p class="chart-description">
-        从多角度展示职位画像，包括薪资待遇、技能要求、行业集中度、职业热度四个维度。
-        <br/>
-        <strong>💡 提示：请选择最多3个职位进行对比分析</strong>
-      </p>
-    
-    <!-- 职位选择区域 -->
-    <div class="job-selector">
-      <div class="selector-group">
-        <label>职位1：</label>
-        <CustomSelect 
-          v-model="selectedJobs[0]" 
+      <div class="selector-grid">
+        <CustomSelect
+          v-model="unifiedJobs[0]"
           :options="jobTitlesList"
-          placeholder="输入或选择职位"
+          placeholder="职位 A"
           :max-visible="100"
         />
-      </div>
-      <div class="selector-group">
-        <label>职位2：</label>
-        <CustomSelect 
-          v-model="selectedJobs[1]" 
+        <CustomSelect
+          v-model="unifiedJobs[1]"
           :options="jobTitlesList"
-          placeholder="输入或选择职位（可选）"
+          placeholder="职位 B"
           :max-visible="100"
         />
-      </div>
-      <div class="selector-group">
-        <label>职位3：</label>
-        <CustomSelect 
-          v-model="selectedJobs[2]" 
+        <CustomSelect
+          v-model="unifiedJobs[2]"
           :options="jobTitlesList"
-          placeholder="输入或选择职位（可选）"
+          placeholder="职位 C"
           :max-visible="100"
         />
       </div>
       <div class="selector-actions">
-        <button 
-          class="btn btn-primary" 
-          @click="loadData"
-          :disabled="loading || !hasValidJobs"
-        >
-          {{ loading ? '加载中...' : '生成平行坐标图' }}
+        <button class="primary-btn" type="button" :disabled="!hasUnifiedJobs" @click="runSyncAnalysis">
+          <span class="btn-inline">
+            <span class="inline-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none">
+                <path d="M20 12.2a8 8 0 0 1-13.7 5.7M4 11.8a8 8 0 0 1 13.7-5.7M5 16.8V18.9H7.1M18.9 5.1H16.8V3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </span>
+            同步分析
+          </span>
         </button>
-        <button 
-          class="btn btn-secondary" 
-          @click="clearSelection"
-          :disabled="loading"
-        >
-          清除选择
+        <button class="ghost-btn" type="button" @click="resetAll">
+          <span class="btn-inline">
+            <span class="inline-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none">
+                <path d="M6.4 8.6A7.2 7.2 0 1 1 5 12M6.4 8.6V4.8M6.4 8.6H10.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </span>
+            重置
+          </span>
         </button>
       </div>
-    </div>
-    
-      <!-- 图表区域 -->
-      <div class="chart-section">
-        <PositionParallelChart 
-          :data="chartData?.data"
-          :loading="loading"
-          :error="error"
-        />
-      </div>
-    </div>
-    
-    <!-- 标签页模式 - 视图二：桑基图 -->
-    <div v-if="layoutMode === 'tabs' && currentView === 'sankey'" class="view-content">
-      <p class="chart-description">
-        展示职位特征到薪资结果的流动路径，揭示技能要求、行业特性、市场需求与薪酬结果之间的转化关系。
-        <br/>
-        <strong>💡 提示：可选择整体模式查看所有职位，或对比模式查看特定职位</strong>
-      </p>
-      
-      <!-- 模式选择 -->
-      <div class="mode-selector">
-        <div class="mode-group">
-          <label>
-            <input 
-              type="radio" 
-              v-model="sankeyMode" 
-              value="all"
-              @change="handleModeChange"
-            />
-            整体模式（展示所有职位）
-          </label>
-          <label>
-            <input 
-              type="radio" 
-              v-model="sankeyMode" 
-              value="compare"
-              @change="handleModeChange"
-            />
-            对比模式（选择特定职位）
-          </label>
-        </div>
-        
-        <!-- 维度选择 -->
-        <div class="dimension-selector">
-          <div class="dimension-title">选择维度（至少2个）：</div>
-          <div class="dimension-group">
-            <label>
-              <input 
-                type="checkbox" 
-                v-model="selectedDimensions" 
-                value="skill_level"
-              />
-              技能要求
-            </label>
-            <label>
-              <input 
-                type="checkbox" 
-                v-model="selectedDimensions" 
-                value="industry_spread"
-              />
-              行业分布
-            </label>
-            <label>
-              <input 
-                type="checkbox" 
-                v-model="selectedDimensions" 
-                value="market_demand"
-              />
-              市场需求
-            </label>
-          </div>
-          <div v-if="selectedDimensions.length < 2" class="dimension-hint">
-            ⚠️ 请至少选择2个维度
-          </div>
-        </div>
-        
-        <!-- 对比模式下的职位选择 -->
-        <div v-if="sankeyMode === 'compare'" class="job-selector">
-          <div class="selector-group">
-            <label>职位1：</label>
-            <CustomSelect 
-              v-model="sankeyJobs[0]" 
-              :options="jobTitlesList"
-              placeholder="输入或选择职位"
-              :max-visible="100"
-            />
-          </div>
-          <div class="selector-group">
-            <label>职位2：</label>
-            <CustomSelect 
-              v-model="sankeyJobs[1]" 
-              :options="jobTitlesList"
-              placeholder="输入或选择职位（可选）"
-              :max-visible="100"
-            />
-          </div>
-          <div class="selector-group">
-            <label>职位3：</label>
-            <CustomSelect 
-              v-model="sankeyJobs[2]" 
-              :options="jobTitlesList"
-              placeholder="输入或选择职位（可选）"
-              :max-visible="100"
-            />
-          </div>
-        </div>
-        
-        <div class="selector-actions">
-          <button 
-            class="btn btn-primary" 
-            @click="loadSankeyData"
-            :disabled="sankeyLoading || selectedDimensions.length < 2 || (sankeyMode === 'compare' && !hasValidSankeyJobs)"
-          >
-            {{ sankeyLoading ? '加载中...' : '生成桑基图' }}
-          </button>
-          <button 
-            class="btn btn-secondary" 
-            @click="clearSankeySelection"
-            :disabled="sankeyLoading"
-          >
-            清除
-          </button>
-        </div>
-      </div>
-      
-      <!-- 桑基图区域 -->
-      <div class="chart-section">
-        <SankeyChart 
-          :data="sankeyData?.data"
-          :loading="sankeyLoading"
-          :error="sankeyError"
-          :emptyMessage="sankeyMode === 'all' ? '点击【生成桑基图】查看整体数据' : '请选择职位并点击【生成桑基图】'"
-        />
-      </div>
-    </div>
-    
-    <!-- 标签页模式 - 视图三：嵌套柱状图 -->
-    <div v-if="layoutMode === 'tabs' && currentView === 'nested'" class="view-content">
-      <p class="chart-description">
-        多维度嵌套柱状图，外层柱子高度表示综合技能分数，内部嵌套柱子的高度和颜色表示行业集中度（颜色从浅蓝到深红，高度越高表示集中度越高）。
-        <br/>
-        <strong>💡 提示：鼠标悬停查看详细信息（薪资、经验、学历、行业集中度），点击柱子查看薪资分布详情</strong>
-      </p>
-      
-      <!-- 职位选择 -->
-      <div class="job-selector">
-        <div class="selector-group">
-          <label>职位1：</label>
-          <CustomSelect 
-            v-model="nestedJobs[0]" 
-            :options="jobTitlesList"
-            placeholder="输入或选择职位"
-            :max-visible="100"
+    </section>
+
+    <section class="three-panel-grid">
+      <article class="panel-card left-panel">
+        <header class="panel-header">
+          <h3 class="panel-title">
+            <span class="title-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none">
+                <path d="M12 4L19 8V16L12 20L5 16V8L12 4Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+                <path d="M12 4V20M5 8L19 16M19 8L5 16" stroke="currentColor" stroke-width="1.2" opacity="0.55"/>
+              </svg>
+            </span>
+            轮廓对比图
+          </h3>
+        </header>
+        <p class="panel-subtitle">薪资水平 / 技能要求 / 行业集中度 / 职业热度 / 城市分布广度</p>
+        <div class="panel-body chart-shell">
+          <Q2SilhouetteComparisonChart
+            :data="chartData?.data"
+            :city-breadth-scores="cityBreadthScores"
+            :loading="loading"
+            :error="error"
           />
         </div>
-        <div class="selector-group">
-          <label>职位2：</label>
-          <CustomSelect 
-            v-model="nestedJobs[1]" 
-            :options="jobTitlesList"
-            placeholder="输入或选择职位（可选）"
-            :max-visible="100"
+      </article>
+
+      <article class="panel-card center-panel">
+        <header class="panel-header">
+          <h3 class="panel-title">
+            <span class="title-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none">
+                <path d="M4 6.5H10.5L13.5 9.5H20M4 17.5H10.5L13.5 14.5H20" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                <circle cx="4" cy="6.5" r="1.6" fill="currentColor"/>
+                <circle cx="20" cy="9.5" r="1.6" fill="currentColor"/>
+                <circle cx="4" cy="17.5" r="1.6" fill="currentColor"/>
+                <circle cx="20" cy="14.5" r="1.6" fill="currentColor"/>
+              </svg>
+            </span>
+            路径流向图
+          </h3>
+          <span class="tiny-badge">
+            <span class="inline-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none">
+                <path d="M6 18L18 6M8.2 6H18V15.8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </span>
+            占比（%）
+          </span>
+        </header>
+        <p class="panel-subtitle">技能水平 → 行业分布 → 市场需求 → 薪资水平</p>
+        <div class="panel-body chart-shell">
+          <SankeyChart
+            :data="sankeyData?.data"
+            :loading="sankeyLoading"
+            :error="sankeyError"
+            empty-message="选择职位后点击【同步分析】"
           />
         </div>
-        <div class="selector-group">
-          <label>职位3：</label>
-          <CustomSelect 
-            v-model="nestedJobs[2]" 
-            :options="jobTitlesList"
-            placeholder="输入或选择职位（可选）"
-            :max-visible="100"
+      </article>
+
+      <article class="panel-card right-panel">
+        <header class="panel-header">
+          <h3 class="panel-title">
+            <span class="title-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none">
+                <path d="M15.5 7V16.5M8.5 8.5V17M3.5 6.7L8.1 4.2L15 7.1L20.3 4.3V17.2L15.9 19.7L9 16.8L3.5 19.7V6.7Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+              </svg>
+            </span>
+            偏好城市地图
+          </h3>
+          <span class="tiny-badge">
+            <span class="inline-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none">
+                <rect x="4.5" y="3.5" width="15" height="17" rx="2.8" stroke="currentColor" stroke-width="1.8"/>
+                <path d="M9.5 12L11.2 13.7L14.7 10.3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </span>
+            城市以匿名编码显示
+          </span>
+        </header>
+        <div class="panel-body map-shell">
+          <div class="map-controls">
+            <label class="ctl">
+              <span class="ctl-label"><i class="ctl-ico width"></i>窗口宽 {{ mapViewConfig.containerWidth }}%</span>
+              <input v-model.number="mapViewConfig.containerWidth" type="range" min="55" max="100" step="1" />
+            </label>
+            <label class="ctl">
+              <span class="ctl-label"><i class="ctl-ico height"></i>窗口高 {{ mapViewConfig.containerHeight }}px</span>
+              <input v-model.number="mapViewConfig.containerHeight" type="range" min="360" max="780" step="10" />
+            </label>
+            <label class="ctl">
+              <span class="ctl-label"><i class="ctl-ico layout"></i>地图大小 {{ mapViewConfig.layoutSize }}%</span>
+              <input v-model.number="mapViewConfig.layoutSize" type="range" min="90" max="150" step="1" />
+            </label>
+            <label class="ctl">
+              <span class="ctl-label"><i class="ctl-ico zoom"></i>地图缩放 {{ mapViewConfig.zoom.toFixed(2) }}</span>
+              <input v-model.number="mapViewConfig.zoom" type="range" min="0.70" max="2.50" step="0.01" />
+            </label>
+            <label class="ctl">
+              <span class="ctl-label"><i class="ctl-ico aspect"></i>地图宽高比 {{ mapViewConfig.aspectScale.toFixed(2) }}</span>
+              <input v-model.number="mapViewConfig.aspectScale" type="range" min="0.58" max="1.05" step="0.01" />
+            </label>
+            <label class="ctl">
+              <span class="ctl-label"><i class="ctl-ico centerx"></i>中心X {{ mapViewConfig.centerX }}%</span>
+              <input v-model.number="mapViewConfig.centerX" type="range" min="5" max="95" step="0.5" />
+            </label>
+            <label class="ctl">
+              <span class="ctl-label"><i class="ctl-ico centery"></i>中心Y {{ mapViewConfig.centerY }}%</span>
+              <input v-model.number="mapViewConfig.centerY" type="range" min="5" max="95" step="0.5" />
+            </label>
+            <div class="map-nav-buttons">
+              <button class="ghost-btn mini-btn with-icon" type="button" @click="zoomMapIn"><i class="nav-ico zoom-in"></i><span>放大</span></button>
+              <button class="ghost-btn mini-btn with-icon" type="button" @click="zoomMapOut"><i class="nav-ico zoom-out"></i><span>缩小</span></button>
+              <button class="ghost-btn mini-btn with-icon" type="button" @click="panMapLeft"><i class="nav-ico left"></i><span>左移</span></button>
+              <button class="ghost-btn mini-btn with-icon" type="button" @click="panMapRight"><i class="nav-ico right"></i><span>右移</span></button>
+              <button class="ghost-btn mini-btn with-icon" type="button" @click="panMapUp"><i class="nav-ico up"></i><span>上移</span></button>
+              <button class="ghost-btn mini-btn with-icon" type="button" @click="panMapDown"><i class="nav-ico down"></i><span>下移</span></button>
+              <button class="ghost-btn mini-btn with-icon" type="button" @click="resetMapViewport"><i class="nav-ico reset"></i><span>复位视图</span></button>
+              <button class="ghost-btn mini-btn with-icon" type="button" @click="resetMapViewConfig"><i class="nav-ico fit"></i><span>重置地图尺寸</span></button>
+            </div>
+            <div class="map-hint"><i class="hint-ico"></i>支持鼠标滚轮缩放与按住拖拽平移，滑杆仅用于微调。</div>
+          </div>
+          <div
+            class="map-resize-shell"
+            :style="{
+              width: `${mapViewConfig.containerWidth}%`,
+              height: `${mapViewConfig.containerHeight}px`
+            }"
+          >
+          <Q2CityPreferenceGeoMap
+            ref="cityGeoRef"
+            :markers="cityPreferenceMarkers"
+            :active-job-slots="activeMapSlots"
+            :loading="cityMapLoading"
+            :selected-code="selectedCityCode"
+            :chart-height="mapViewConfig.containerHeight"
+            :map-layout-size="mapViewConfig.layoutSize"
+            :map-center-x="mapViewConfig.centerX"
+            :map-center-y="mapViewConfig.centerY"
+            :map-zoom="mapViewConfig.zoom"
+            :map-aspect-scale="mapViewConfig.aspectScale"
+            @select-city="toggleCitySelection"
+            @view-change="onMapViewChange"
           />
+          </div>
+          <div v-if="selectedCitySummary" class="city-summary-box">
+            <div class="summary-title"><i class="summary-ico"></i>{{ selectedCitySummary.code }}（锁定）</div>
+            <div class="summary-line">经纬度：{{ Number(selectedCitySummary.mappedLon || 0).toFixed(3) }}, {{ Number(selectedCitySummary.mappedLat || 0).toFixed(3) }}</div>
+            <div class="summary-line">总需求：{{ selectedCitySummary.total }}</div>
+            <div class="summary-line">职位A：{{ selectedCitySummary.counts[0] }}</div>
+            <div class="summary-line">职位B：{{ selectedCitySummary.counts[1] }}</div>
+            <div class="summary-line">职位C：{{ selectedCitySummary.counts[2] }}</div>
+            <div class="summary-line">城市排名：Top {{ selectedCitySummary.rank }}</div>
+          </div>
+          <div class="map-legend">
+            <button
+              type="button"
+              :class="['legend-item', { active: isMapSlotActive('A') }]"
+              @click="toggleMapSlot('A')"
+            >
+              <i class="dot a"></i>职位 A：{{ legendJobs[0] }}
+            </button>
+            <button
+              type="button"
+              :class="['legend-item', { active: isMapSlotActive('B') }]"
+              @click="toggleMapSlot('B')"
+            >
+              <i class="dot b"></i>职位 B：{{ legendJobs[1] }}
+            </button>
+            <button
+              type="button"
+              :class="['legend-item', { active: isMapSlotActive('C') }]"
+              @click="toggleMapSlot('C')"
+            >
+              <i class="dot c"></i>职位 C：{{ legendJobs[2] }}
+            </button>
+            <div class="legend-status">{{ isAllMapSlotsSelected ? '当前：全部职位分布' : `当前：${activeMapSlots.join(' + ')} 分布` }}</div>
+          </div>
+          <div class="city-drilldown" v-if="selectedCitySummary">
+            <div class="drilldown-title"><i class="drill-ico"></i>城市下钻 · {{ selectedCitySummary.code }}</div>
+            <div class="drilldown-meta">总需求 {{ selectedCitySummary.total }}，主导职位 {{ selectedCityDominantLabel }}</div>
+            <div class="drilldown-grid">
+              <div
+                v-for="item in selectedCityJobProfiles"
+                :key="item.jobKey"
+                :class="['drill-cell', item.slot]"
+              >
+                <div class="cell-head">{{ item.label }}</div>
+                <div class="cell-main">{{ item.cityCount }}（{{ item.cityRatio }}%）</div>
+                <div class="cell-sub">薪资 {{ item.salary || '--' }} / 经验 {{ item.experience || '--' }} / 学历 {{ item.education || '--' }}</div>
+              </div>
+            </div>
+          </div>
         </div>
-        
-        <div class="selector-actions">
-          <button 
-            class="btn btn-primary" 
-            @click="loadNestedData(null)"
-            :disabled="nestedLoading || !hasValidNestedJobs"
-          >
-            {{ nestedLoading ? '加载中...' : '生成柱状图' }}
-          </button>
-          <button 
-            class="btn btn-secondary" 
-            @click="clearNestedSelection"
-            :disabled="nestedLoading"
-          >
-            清除
-          </button>
-          <button 
-            v-if="selectedDetailJob"
-            class="btn btn-secondary" 
-            @click="backToMacro"
-            :disabled="nestedLoading"
-          >
-            返回宏观对比
-          </button>
-        </div>
+      </article>
+    </section>
+
+    <footer class="stats-bar">
+      <div class="stat-item">
+        <div class="stat-label"><i class="stat-ico sample"></i>分析样本</div>
+        <div class="stat-value">{{ sampleCountText }} 条记录</div>
       </div>
-      
-      <!-- 嵌套柱状图区域 -->
-      <div class="chart-section">
-        <NestedBarChart 
-          :data="nestedData?.data"
-          :loading="nestedLoading"
-          :error="nestedError"
-          @selectJob="handleSelectDetailJob"
-        />
+      <div class="stat-item">
+        <div class="stat-label"><i class="stat-ico industry"></i>覆盖行业</div>
+        <div class="stat-value">{{ industryCoverage }} 个</div>
       </div>
-    </div>
-  </div>
+      <div class="stat-item">
+        <div class="stat-label"><i class="stat-ico city"></i>覆盖城市</div>
+        <div class="stat-value">{{ cityCoverage }} 个</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-label"><i class="stat-ico dimension"></i>分析维度</div>
+        <div class="stat-value">5 大维度</div>
+      </div>
+    </footer>
+  </section>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { computed, nextTick, onMounted, ref } from 'vue'
 import { useFetchData } from '@/utils/fetchData.js'
-import { getParallelCoordinatesData, getSankeyData, getNestedBarData, getJobTitlesList } from '@/api/positionApi.js'
-import PositionParallelChart from '@/components/charts/PositionParallelChart.vue'
+import { getJobTitlesList, getNestedBarData, getParallelCoordinatesData, getSankeyData } from '@/api/positionApi.js'
+import { CHINA_CITY_ANCHORS, HOT_CITY_PRIORITY } from '@/config/chinaCityAnchors.js'
+import Q2SilhouetteComparisonChart from '@/components/charts/Q2SilhouetteComparisonChart.vue'
 import SankeyChart from '@/components/charts/SankeyChart.vue'
-import NestedBarChart from '@/components/charts/NestedBarChart.vue'
+import Q2CityPreferenceGeoMap from '@/components/charts/Q2CityPreferenceGeoMap.vue'
 import CustomSelect from '@/components/common/CustomSelect.vue'
 
-// 布局模式切换
-const layoutMode = ref('tabs') // 'tabs' 或 'grid'
-
-// 视图切换
-const currentView = ref('parallel')
-
-// 职位列表
+const analysisPeriod = ref('2024Q2')
 const jobTitlesList = ref([])
-const loadingJobTitles = ref(false)
+const unifiedJobs = ref(['', '', ''])
 
+const selectedJobs = ref(['', '', ''])
+const sankeyJobs = ref(['', '', ''])
+const nestedJobs = ref(['', '', ''])
 
-// 加载职位列表
-const loadJobTitles = async () => {
-  try {
-    loadingJobTitles.value = true
-    const response = await getJobTitlesList()
-    if (response && response.data && response.data.job_titles) {
-      jobTitlesList.value = response.data.job_titles
+const sankeyMode = ref('compare')
+const selectedDimensions = ref(['skill_level', 'industry_spread', 'market_demand'])
+const sankeyData = ref(null)
+const sankeyLoading = ref(false)
+const sankeyError = ref(null)
+const SANKEY_JOB_COLORS = ['#2f6df6', '#ef5350', '#37b568']
+
+const nestedData = ref(null)
+const cityBreadthScores = ref({})
+const cityPreferenceMarkers = ref([])
+const cityMapLoading = ref(false)
+const selectedCityCode = ref('')
+const cityGeoRef = ref(null)
+const MAP_SLOTS = ['A', 'B', 'C']
+const activeMapSlots = ref([...MAP_SLOTS])
+const DEFAULT_MAP_VIEW_CONFIG = {
+  containerWidth: 100,
+  containerHeight: 560,
+  layoutSize: 118,
+  centerX: 50,
+  centerY: 70,
+  zoom: 1.18,
+  aspectScale: 0.75
+}
+const mapViewConfig = ref({ ...DEFAULT_MAP_VIEW_CONFIG })
+
+const hasUnifiedJobs = computed(() => unifiedJobs.value.some((job) => job && job.trim()))
+
+const { data: chartData, loading, error, execute } = useFetchData(() => {
+  const validJobs = selectedJobs.value.filter((job) => job && job.trim())
+  if (!validJobs.length) {
+    throw new Error('请至少选择一个职位')
+  }
+  return getParallelCoordinatesData(validJobs)
+})
+
+const sampleCountText = computed(() => {
+  const count = chartData.value?.data?.positions?.reduce((sum, item) => {
+    return sum + Number(item?.details?.job_frequency || 0)
+  }, 0)
+  return Number(count || 0).toLocaleString('zh-CN')
+})
+
+const industryCoverage = computed(() => {
+  const nodes = sankeyData.value?.data?.nodes || []
+  return nodes.filter((node) => node.category === '行业分布').length
+})
+
+const cityCoverage = computed(() => {
+  return cityPreferenceMarkers.value.length
+})
+
+const legendJobs = computed(() => {
+  const valid = selectedJobs.value.filter((job) => job && job.trim())
+  const labels = valid.slice(0, 3).map((job) => `${job.slice(0, 6)}...${job.slice(-4)}`)
+  while (labels.length < 3) labels.push('未选择')
+  return labels
+})
+
+const selectedCitySummary = computed(() => {
+  if (!selectedCityCode.value) return null
+  return cityPreferenceMarkers.value.find((marker) => marker.code === selectedCityCode.value) || null
+})
+
+const isAllMapSlotsSelected = computed(() => activeMapSlots.value.length === MAP_SLOTS.length)
+
+const selectedCityDominantLabel = computed(() => {
+  const summary = selectedCitySummary.value
+  if (!summary) return '--'
+  const maxValue = Math.max(...summary.counts)
+  const maxIndex = summary.counts.findIndex((v) => v === maxValue)
+  if (maxValue <= 0 || maxIndex < 0) return '--'
+  return ['职位A', '职位B', '职位C'][maxIndex]
+})
+
+const selectedCityJobProfiles = computed(() => {
+  const summary = selectedCitySummary.value
+  if (!summary) return []
+
+  const positions = chartData.value?.data?.positions || []
+  const detailByTitle = new Map(positions.map((item) => [item.job_title, item.details || {}]))
+  const validTitles = selectedJobs.value.filter((job) => job && job.trim()).slice(0, 3)
+
+  return [0, 1, 2].map((idx) => {
+    const title = validTitles[idx]
+    const details = title ? detailByTitle.get(title) : null
+    const slot = ['slot-a', 'slot-b', 'slot-c'][idx]
+    return {
+      jobKey: `${summary.code}-${idx}-${title || 'none'}`,
+      label: `职位${['A', 'B', 'C'][idx]} · ${title ? `${title.slice(0, 6)}...${title.slice(-4)}` : '未选择'}`,
+      cityCount: summary.counts[idx] || 0,
+      cityRatio: summary.ratios[idx] || 0,
+      salary: details?.salary || '',
+      experience: details?.experience || '',
+      education: details?.education || '',
+      slot
     }
-  } catch (err) {
-    console.error('加载职位列表失败:', err)
-  } finally {
-    loadingJobTitles.value = false
+  })
+})
+
+const toggleCitySelection = (cityCode) => {
+  if (selectedCityCode.value === cityCode) {
+    selectedCityCode.value = ''
+  } else {
+    selectedCityCode.value = cityCode
   }
 }
 
-// 组件挂载时加载职位列表
-onMounted(() => {
-  loadJobTitles()
-})
+const isMapSlotActive = (slot) => activeMapSlots.value.includes(slot)
 
-// 统一职位管理
-const unifiedJobs = ref(['', '', ''])
+const toggleMapSlot = (slot) => {
+  if (!MAP_SLOTS.includes(slot)) return
 
-// 检查是否有统一职位
-const hasUnifiedJobs = computed(() => {
-  return unifiedJobs.value.some(job => job && job.trim())
-})
+  if (activeMapSlots.value.includes(slot)) {
+    if (activeMapSlots.value.length === 1) {
+      activeMapSlots.value = [...MAP_SLOTS]
+      return
+    }
+    activeMapSlots.value = activeMapSlots.value.filter((item) => item !== slot)
+    return
+  }
 
-// 同步职位到所有视图
+  const next = [...activeMapSlots.value, slot]
+  activeMapSlots.value = MAP_SLOTS.filter((item) => next.includes(item))
+}
+
+const onMapViewChange = (viewState) => {
+  if (!viewState) return
+  if (Number.isFinite(Number(viewState.zoom))) {
+    mapViewConfig.value.zoom = Number(Number(viewState.zoom).toFixed(2))
+  }
+  if (Number.isFinite(Number(viewState.centerX))) {
+    mapViewConfig.value.centerX = Number(Number(viewState.centerX).toFixed(1))
+  }
+  if (Number.isFinite(Number(viewState.centerY))) {
+    mapViewConfig.value.centerY = Number(Number(viewState.centerY).toFixed(1))
+  }
+}
+
+const zoomMapIn = () => cityGeoRef.value?.zoomIn?.()
+const zoomMapOut = () => cityGeoRef.value?.zoomOut?.()
+const panMapLeft = () => cityGeoRef.value?.panLeft?.()
+const panMapRight = () => cityGeoRef.value?.panRight?.()
+const panMapUp = () => cityGeoRef.value?.panUp?.()
+const panMapDown = () => cityGeoRef.value?.panDown?.()
+
+const resetMapViewport = () => {
+  cityGeoRef.value?.resetView?.()
+}
+
+const resetMapViewConfig = () => {
+  mapViewConfig.value = { ...DEFAULT_MAP_VIEW_CONFIG }
+  nextTick(() => {
+    cityGeoRef.value?.resetView?.()
+  })
+}
+
+const stableHash = (text) => {
+  let hash = 2166136261
+  for (let i = 0; i < text.length; i += 1) {
+    hash ^= text.charCodeAt(i)
+    hash = Math.imul(hash, 16777619)
+  }
+  return hash >>> 0
+}
+
+const CHINA_PROJECTION = {
+  width: 1400,
+  height: 980,
+  pad: 36,
+  minLon: 73.502355,
+  maxLon: 135.09567,
+  minLat: 3.39716187,
+  maxLat: 53.563269
+}
+
+const cityAnchorPool = CHINA_CITY_ANCHORS.filter(
+  (item) => Number.isFinite(Number(item.lon)) && Number.isFinite(Number(item.lat))
+)
+const cityAnchorByName = new Map(cityAnchorPool.map((item) => [item.name, item]))
+const hotCityAnchors = HOT_CITY_PRIORITY.map((name) => cityAnchorByName.get(name)).filter(Boolean)
+
+// 热门映射目标：优先承接高频编码（真实热门城市）
+const HOT_TARGET_CITY_NAMES = [
+  '北京市',
+  '成都市',
+  '武汉市',
+  '西安市',
+  '重庆市',
+  '天津市',
+  '郑州市',
+  '长沙市',
+  '南京市',
+  '济南市',
+  '合肥市'
+]
+
+// 分散映射池：覆盖全国，避免全部压到华东华南
+const SPREAD_TARGET_CITY_NAMES = [
+  '乌鲁木齐市',
+  '西宁市',
+  '银川市',
+  '兰州市',
+  '西安市',
+  '呼和浩特市',
+  '太原市',
+  '石家庄市',
+  '北京市',
+  '天津市',
+  '济南市',
+  '郑州市',
+  '武汉市',
+  '长沙市',
+  '南昌市',
+  '合肥市',
+  '南京市',
+  '成都市',
+  '重庆市',
+  '贵阳市',
+  '昆明市',
+  '南宁市',
+  '长春市',
+  '哈尔滨市',
+  '沈阳市',
+  '青岛市',
+  '临沂市'
+]
+
+const hotTargetAnchors = HOT_TARGET_CITY_NAMES.map((name) => cityAnchorByName.get(name)).filter(Boolean)
+const spreadTargetAnchors = SPREAD_TARGET_CITY_NAMES.map((name) => cityAnchorByName.get(name)).filter(Boolean)
+const hotCityNameSet = new Set(hotTargetAnchors.map((item) => item.name))
+// 限制最东/最北锚点，避免气泡中心落到海面视觉区域
+const nonHotCityAnchors = spreadTargetAnchors.filter(
+  (item) =>
+    !hotCityNameSet.has(item.name) &&
+    Number(item.lon) >= 87 &&
+    Number(item.lon) <= 120.6 &&
+    Number(item.lat) >= 24 &&
+    Number(item.lat) <= 43.6
+)
+
+const MAINLAND_BBOX_PERCENT = {
+  xMin: 19,
+  xMax: 79,
+  yMin: 12,
+  yMax: 83
+}
+
+const HOT_BIND_TOP_N = 9
+
+const projectLonLatToPercent = (lon, lat) => {
+  const spanLon = CHINA_PROJECTION.maxLon - CHINA_PROJECTION.minLon
+  const spanLat = CHINA_PROJECTION.maxLat - CHINA_PROJECTION.minLat
+  const scaleX = (CHINA_PROJECTION.width - CHINA_PROJECTION.pad * 2) / spanLon
+  const scaleY = (CHINA_PROJECTION.height - CHINA_PROJECTION.pad * 2) / spanLat
+  const scale = Math.min(scaleX, scaleY)
+  const mapWidth = spanLon * scale
+  const offsetX = (CHINA_PROJECTION.width - mapWidth) / 2
+  const x = offsetX + (lon - CHINA_PROJECTION.minLon) * scale
+  const y = CHINA_PROJECTION.pad + (CHINA_PROJECTION.maxLat - lat) * scale
+  return {
+    x: (x / CHINA_PROJECTION.width) * 100,
+    y: (y / CHINA_PROJECTION.height) * 100
+  }
+}
+
+const buildCityAnchorAssignments = (markersRaw) => {
+  const mapping = new Map()
+  const used = new Set()
+  const sorted = [...markersRaw].sort((a, b) => b.total - a.total)
+
+  const findFirstUnused = (pool) => pool.find((candidate) => !used.has(candidate.name)) || null
+
+  const findHashedUnused = (pool, code) => {
+    if (!pool.length) return null
+    const start = stableHash(code) % pool.length
+    for (let step = 0; step < pool.length; step += 1) {
+      const candidate = pool[(start + step) % pool.length]
+      if (!used.has(candidate.name)) return candidate
+    }
+    return pool[start]
+  }
+
+  // 给编码分配锚点：高频->热门城市，其他->全国分散城市池
+  sorted.forEach((item) => {
+    let anchor = null
+
+    if (mapping.size < Math.min(HOT_BIND_TOP_N, hotTargetAnchors.length)) {
+      anchor = findFirstUnused(hotTargetAnchors)
+    }
+
+    if (!anchor) {
+      anchor = findHashedUnused(nonHotCityAnchors, item.code)
+    }
+
+    if (!anchor) {
+      anchor = findHashedUnused(cityAnchorPool, item.code)
+    }
+
+    if (anchor) {
+      used.add(anchor.name)
+      mapping.set(item.code, anchor)
+    }
+  })
+
+  return mapping
+}
+
+const mappedPositionForCity = (cityCode, anchor) => {
+  const base = projectLonLatToPercent(Number(anchor.lon), Number(anchor.lat))
+
+  return {
+    x: Math.min(MAINLAND_BBOX_PERCENT.xMax, Math.max(MAINLAND_BBOX_PERCENT.xMin, base.x)),
+    y: Math.min(MAINLAND_BBOX_PERCENT.yMax, Math.max(MAINLAND_BBOX_PERCENT.yMin, base.y))
+  }
+}
+
+const buildCityPreferenceMarkers = (jobCityLists) => {
+  const cityAgg = new Map()
+
+  jobCityLists.forEach((cities, idx) => {
+    cities.forEach((item) => {
+      const cityCode = item.city
+      const count = Number(item.count || 0)
+      if (!cityCode || count <= 0) return
+
+      if (!cityAgg.has(cityCode)) {
+        cityAgg.set(cityCode, { code: cityCode, counts: [0, 0, 0], total: 0 })
+      }
+
+      const entry = cityAgg.get(cityCode)
+      entry.counts[idx] += count
+      entry.total += count
+    })
+  })
+
+  const markersRaw = Array.from(cityAgg.values())
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 30)
+
+  if (!markersRaw.length) return []
+  const anchorMap = buildCityAnchorAssignments(markersRaw)
+
+  const totals = markersRaw.map((m) => m.total)
+  const sqrtMin = Math.sqrt(Math.min(...totals))
+  const sqrtMax = Math.sqrt(Math.max(...totals))
+  const span = Math.max(sqrtMax - sqrtMin, 1)
+
+  const placed = []
+  markersRaw.forEach((item, idx) => {
+    const anchor = anchorMap.get(item.code)
+    const base = anchor ? mappedPositionForCity(item.code, anchor) : { x: 50, y: 50 }
+    const norm = (Math.sqrt(item.total) - sqrtMin) / span
+    const radius = Math.round(10 + norm * 18)
+    const total = Math.max(item.total, 1)
+    const ratios = item.counts.map((count) => Number(((count / total) * 100).toFixed(2)))
+    const tooltip = [
+      `城市编码: ${item.code}`,
+      `映射经纬度: ${anchor ? `${Number(anchor.lon).toFixed(3)}, ${Number(anchor.lat).toFixed(3)}` : '未知'}`,
+      `总需求: ${item.total}`,
+      `职位A: ${item.counts[0]} (${ratios[0]}%)`,
+      `职位B: ${item.counts[1]} (${ratios[1]}%)`,
+      `职位C: ${item.counts[2]} (${ratios[2]}%)`
+    ].join(' | ')
+
+    const marker = {
+      ...item,
+      x: base.x,
+      y: base.y,
+      radius,
+      ratios,
+      tooltip,
+      rank: idx + 1,
+      mappedCity: anchor?.name || '未知',
+      mappedAdcode: anchor?.adcode || '',
+      mappedLon: anchor?.lon,
+      mappedLat: anchor?.lat
+    }
+    placed.push(marker)
+
+    // 不再执行自动推挤，确保点位严格贴合映射经纬度。
+  })
+
+  return placed
+}
+
+const loadJobTitles = async () => {
+  try {
+    const response = await getJobTitlesList()
+    jobTitlesList.value = response?.data?.job_titles || []
+
+    if (jobTitlesList.value.length >= 3 && !hasUnifiedJobs.value) {
+      unifiedJobs.value = [jobTitlesList.value[0], jobTitlesList.value[1], jobTitlesList.value[2]]
+    }
+  } catch (err) {
+    console.error('加载职位列表失败:', err)
+  }
+}
+
 const syncToAllViews = () => {
   selectedJobs.value = [...unifiedJobs.value]
   sankeyJobs.value = [...unifiedJobs.value]
   nestedJobs.value = [...unifiedJobs.value]
 }
 
-// 一键生成所有视图
-const loadAllViews = async () => {
-  syncToAllViews()
-  
-  // 如果有职位输入，自动切换桑基图为对比模式
-  if (hasUnifiedJobs.value) {
-    sankeyMode.value = 'compare'
-  }
-  
-  // 并行加载所有视图
-  const promises = []
-  
-  if (hasValidJobs.value) {
-    promises.push(loadData())
-  }
-  
-  // 桑基图：有职位时用对比模式，否则用整体模式
-  if (hasValidSankeyJobs.value) {
-    promises.push(loadSankeyData())
-  }
-  
-  if (hasValidNestedJobs.value) {
-    promises.push(loadNestedData(null))
-  }
-  
-  try {
-    await Promise.all(promises)
-    console.log('所有视图加载完成')
-  } catch (err) {
-    console.error('加载视图失败', err)
-  }
-}
-
-// 清空所有职位
-const clearAllJobs = () => {
-  unifiedJobs.value = ['', '', '']
-  selectedJobs.value = ['', '', '']
-  sankeyJobs.value = ['', '', '']
-  nestedJobs.value = ['', '', '']
-  chartData.value = null
-  sankeyData.value = null
-  nestedData.value = null
-}
-
-// ========== 视图一：平行坐标图 ==========
-// 职位选择
-const selectedJobs = ref(['', '', ''])
-
-// 数据获取
-const { data: chartData, loading, error, execute } = useFetchData(() => {
-  const validJobs = selectedJobs.value.filter(job => job && job.trim())
-  if (validJobs.length === 0) {
-    throw new Error('请至少选择一个职位')
-  }
-  return getParallelCoordinatesData(validJobs)
-})
-
-// 检查是否有有效的职位选择
-const hasValidJobs = computed(() => {
-  return selectedJobs.value.some(job => job && job.trim())
-})
-
-
-// 加载数据
-const loadData = async () => {
-  const validJobs = selectedJobs.value.filter(job => job && job.trim())
-  if (validJobs.length === 0) {
-    alert('请至少选择一个职位')
+const loadParallelData = async () => {
+  const validJobs = selectedJobs.value.filter((job) => job && job.trim())
+  if (!validJobs.length) {
     return
   }
-  if (validJobs.length > 3) {
-    alert('最多只能选择3个职位')
-    return
-  }
-  
-  try {
-    console.log('Q2Tab: 开始加载数据，职位:', validJobs)
-    const response = await execute()
-    console.log('Q2Tab: 数据加载成功', {
-      response,
-      chartData: chartData.value,
-      data: chartData.value?.data
-    })
-  } catch (err) {
-    console.error('Q2Tab: 加载数据失败', err)
-    alert('加载数据失败: ' + (err.message || '未知错误'))
-  }
+  await execute()
 }
 
-// 清除选择
-const clearSelection = () => {
-  selectedJobs.value = ['', '', '']
-  chartData.value = null
-}
-
-// ========== 视图二：桑基图 ==========
-// 桑基图模式
-const sankeyMode = ref('all')
-const sankeyJobs = ref(['', '', ''])
-const sankeyData = ref(null)
-const sankeyLoading = ref(false)
-const sankeyError = ref(null)
-// 选择的维度（默认全选）
-const selectedDimensions = ref(['skill_level', 'industry_spread', 'market_demand'])
-
-// 检查是否有有效的桑基图职位选择
-const hasValidSankeyJobs = computed(() => {
-  return sankeyJobs.value.some(job => job && job.trim())
-})
-
-// 处理模式变化
-const handleModeChange = () => {
-  sankeyData.value = null
-  sankeyError.value = null
-}
-
-// 加载桑基图数据
 const loadSankeyData = async () => {
   try {
-    // 验证维度选择
-    if (selectedDimensions.value.length < 2) {
-      alert('请至少选择2个维度')
-      return
-    }
-    
     sankeyLoading.value = true
     sankeyError.value = null
-    
-    let validJobs = []
-    if (sankeyMode.value === 'compare') {
-      validJobs = sankeyJobs.value.filter(job => job && job.trim())
-      if (validJobs.length === 0) {
-        alert('对比模式下请至少选择一个职位')
-        sankeyLoading.value = false
-        return
+
+    const validJobs = sankeyJobs.value.filter((job) => job && job.trim())
+    if (!validJobs.length) {
+      return
+    }
+
+    const responses = await Promise.all(
+      validJobs.slice(0, 3).map((jobTitle) => getSankeyData('compare', [jobTitle], selectedDimensions.value))
+    )
+
+    const mergedNodes = []
+    const mergedLinks = []
+    const nodeByKey = new Map()
+    const mergedCategoriesSet = new Set()
+    const jobLegend = []
+
+    const ensureNode = (rawName, category) => {
+      const safeName = String(rawName || '').trim()
+      if (!safeName) return null
+      const key = `${category || '未知'}|${safeName}`
+      if (!nodeByKey.has(key)) {
+        const node = {
+          name: key,
+          displayName: safeName,
+          category: category || '未知'
+        }
+        nodeByKey.set(key, node)
+        mergedNodes.push(node)
+      }
+      return key
+    }
+
+    responses.forEach((resp, idx) => {
+      const sankeyPart = resp?.data || {}
+      const nodes = Array.isArray(sankeyPart.nodes) ? sankeyPart.nodes : []
+      const links = Array.isArray(sankeyPart.links) ? sankeyPart.links : []
+      const categories = Array.isArray(sankeyPart.categories) ? sankeyPart.categories : []
+      const slotLabel = `职位${['A', 'B', 'C'][idx]}`
+      const color = SANKEY_JOB_COLORS[idx] || '#5b6f90'
+      const jobTitle = validJobs[idx]
+
+      jobLegend.push({
+        slot: slotLabel,
+        color,
+        jobTitle
+      })
+
+      categories.forEach((c) => mergedCategoriesSet.add(c))
+
+      const categoryByName = new Map()
+      nodes.forEach((node) => {
+        const rawName = String(node?.name || '').trim()
+        if (!rawName) return
+        const category = node?.category || '未知'
+        categoryByName.set(rawName, category)
+        ensureNode(rawName, category)
+      })
+
+      links.forEach((link) => {
+        const sourceName = String(link?.source || '').trim()
+        const targetName = String(link?.target || '').trim()
+        const value = Number(link?.value || 0)
+        if (!sourceName || !targetName || value <= 0) return
+
+        const sourceCategory = categoryByName.get(sourceName) || '未知'
+        const targetCategory = categoryByName.get(targetName) || '未知'
+        const sourceKey = ensureNode(sourceName, sourceCategory)
+        const targetKey = ensureNode(targetName, targetCategory)
+        if (!sourceKey || !targetKey) return
+
+        mergedLinks.push({
+          source: sourceKey,
+          target: targetKey,
+          sourceLabel: sourceName,
+          targetLabel: targetName,
+          value,
+          jobSlot: slotLabel,
+          jobTitle,
+          lineStyle: {
+            color,
+            opacity: 0.42,
+            curveness: 0.45 + idx * 0.06
+          }
+        })
+      })
+    })
+
+    sankeyData.value = {
+      code: 200,
+      message: '获取桑基图数据成功',
+      data: {
+        nodes: mergedNodes,
+        links: mergedLinks,
+        categories: Array.from(mergedCategoriesSet),
+        jobLegend
       }
     }
-    
-    console.log('Q2Tab: 开始加载桑基图数据', {
-      mode: sankeyMode.value,
-      jobs: validJobs,
-      dimensions: selectedDimensions.value
-    })
-    
-    const response = await getSankeyData(sankeyMode.value, validJobs, selectedDimensions.value)
-    sankeyData.value = response
-    
-    console.log('Q2Tab: 桑基图数据加载成功', response)
   } catch (err) {
-    console.error('Q2Tab: 加载桑基图数据失败', err)
-    sankeyError.value = err.message || '加载数据失败'
-    alert('加载桑基图数据失败: ' + (err.message || '未知错误'))
+    console.error('加载桑基图数据失败:', err)
+    sankeyError.value = err?.message || '加载桑基图失败'
   } finally {
     sankeyLoading.value = false
   }
 }
 
-// 清除桑基图选择
-const clearSankeySelection = () => {
-  sankeyJobs.value = ['', '', '']
-  sankeyData.value = null
-  sankeyError.value = null
+const loadNestedData = async () => {
+  const validJobs = nestedJobs.value.filter((job) => job && job.trim())
+  if (!validJobs.length) {
+    nestedData.value = null
+    return
+  }
+
+  try {
+    nestedData.value = await getNestedBarData(validJobs, null)
+  } catch (err) {
+    console.error('加载嵌套数据失败:', err)
+    nestedData.value = null
+  }
 }
 
-// ========== 视图三：嵌套柱状图 ==========
-const nestedJobs = ref(['', '', ''])
-const nestedData = ref(null)
-const nestedLoading = ref(false)
-const nestedError = ref(null)
-const selectedDetailJob = ref(null)
+const loadCityBreadthScores = async () => {
+  const validJobs = selectedJobs.value.filter((job) => job && job.trim())
+  if (!validJobs.length) {
+    cityBreadthScores.value = {}
+    cityPreferenceMarkers.value = []
+    return
+  }
 
-// 检查是否有有效的嵌套图职位选择
-const hasValidNestedJobs = computed(() => {
-  return nestedJobs.value.some(job => job && job.trim())
-})
-
-// 加载嵌套柱状图数据
-const loadNestedData = async (detailJob = null) => {
   try {
-    nestedLoading.value = true
-    nestedError.value = null
-    
-    const validJobs = nestedJobs.value.filter(job => job && job.trim())
-    if (validJobs.length === 0) {
-      alert('请至少选择一个职位')
-      nestedLoading.value = false
+    cityMapLoading.value = true
+    selectedCityCode.value = ''
+    const pairs = await Promise.all(
+      validJobs.map(async (jobTitle) => {
+        const response = await getNestedBarData(validJobs, jobTitle)
+        const cityCount = Number(response?.data?.micro_analysis?.all_cities?.length || 0)
+        const cities = response?.data?.micro_analysis?.all_cities || []
+        return { jobTitle, cityCount, cities }
+      })
+    )
+
+    const rawMap = Object.fromEntries(pairs.map((item) => [item.jobTitle, item.cityCount]))
+    const values = Object.values(rawMap)
+
+    if (!values.length) {
+      cityBreadthScores.value = {}
       return
     }
-    
-    // 验证 detailJob 参数
-    let validDetailJob = null
-    if (detailJob && typeof detailJob === 'string' && detailJob.trim()) {
-      validDetailJob = detailJob.trim()
-    }
-    
-    console.log('Q2Tab: 开始加载嵌套柱状图数据', {
-      jobs: validJobs,
-      detailJob: validDetailJob
+
+    const minV = Math.min(...values)
+    const maxV = Math.max(...values)
+    const normalized = {}
+
+    Object.entries(rawMap).forEach(([jobTitle, value]) => {
+      let score = 0
+      if (maxV === minV) {
+        score = value > 0 ? 100 : 0
+      } else {
+        score = ((value - minV) / (maxV - minV)) * 100
+      }
+      normalized[jobTitle] = Number(score.toFixed(1))
     })
-    
-    const response = await getNestedBarData(validJobs, validDetailJob)
-    nestedData.value = response
-    selectedDetailJob.value = validDetailJob
-    
-    console.log('Q2Tab: 嵌套柱状图数据加载成功', response)
+
+    cityBreadthScores.value = normalized
+    const cityLists = pairs.map((item) => item.cities)
+    cityPreferenceMarkers.value = buildCityPreferenceMarkers(cityLists)
   } catch (err) {
-    console.error('Q2Tab: 加载嵌套柱状图数据失败', err)
-    nestedError.value = err.message || '加载数据失败'
-    alert('加载嵌套柱状图数据失败: ' + (err.message || '未知错误'))
+    console.error('加载城市分布广度失败:', err)
+    cityBreadthScores.value = {}
+    cityPreferenceMarkers.value = []
   } finally {
-    nestedLoading.value = false
+    cityMapLoading.value = false
   }
 }
 
-// 处理选择详细职位
-const handleSelectDetailJob = (jobTitle) => {
-  console.log('Q2Tab: 选择详细职位', jobTitle, '类型:', typeof jobTitle)
-  if (typeof jobTitle === 'string' && jobTitle.trim()) {
-    loadNestedData(jobTitle)
-  } else {
-    console.error('Q2Tab: 无效的职位名称', jobTitle)
-  }
+const runSyncAnalysis = async () => {
+  syncToAllViews()
+  await Promise.all([loadParallelData(), loadSankeyData(), loadNestedData(), loadCityBreadthScores()])
 }
 
-// 返回宏观对比
-const backToMacro = () => {
-  selectedDetailJob.value = null
-  loadNestedData(null)
-}
-
-// 清除嵌套图选择
-const clearNestedSelection = () => {
+const resetAll = () => {
+  unifiedJobs.value = ['', '', '']
+  selectedJobs.value = ['', '', '']
+  sankeyJobs.value = ['', '', '']
   nestedJobs.value = ['', '', '']
+  sankeyData.value = null
+  sankeyError.value = null
   nestedData.value = null
-  nestedError.value = null
-  selectedDetailJob.value = null
+  cityBreadthScores.value = {}
+  cityPreferenceMarkers.value = []
+  selectedCityCode.value = ''
+  activeMapSlots.value = [...MAP_SLOTS]
+  chartData.value = null
 }
 
-// 展开视图到标签页模式
-const expandView = (view) => {
-  layoutMode.value = 'tabs'
-  currentView.value = view
-}
-
-// 拖拽功能（保留用于兼容性，但下拉框不需要拖拽）
-const handleDrop = (event, targetView) => {
-  event.preventDefault()
-  // 下拉框不需要拖拽功能，保留此函数以避免错误
-}
-
+onMounted(async () => {
+  await loadJobTitles()
+})
 </script>
 
 <style scoped>
-.q2-tab {
+.q2-layout {
+  --job-a: #2f6df6;
+  --job-b: #ef5350;
+  --job-c: #37b568;
+  font-family: 'Noto Sans SC', 'Source Han Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
   display: flex;
   flex-direction: column;
-  gap: 20px;
-  background: rgb(225, 214, 207);
-  padding: 20px;
-  border-radius: 12px;
-}
-
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-}
-
-.q2-tab h2 {
-  margin: 0;
-  color: #2c3e50;
-  font-size: 24px;
-}
-
-/* 布局切换按钮 */
-.layout-toggle {
-  display: flex;
-  gap: 8px;
-  background: #f5f5f5;
-  padding: 4px;
-  border-radius: 8px;
-}
-
-.layout-btn {
-  padding: 8px 16px;
-  background: transparent;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 14px;
-  color: #666;
-  transition: all 0.3s;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.layout-btn span {
-  font-size: 16px;
-}
-
-.layout-btn:hover {
-  background: rgba(84, 112, 198, 0.1);
-  color: #5470c6;
-}
-
-.layout-btn.active {
-  background: #5470c6;
-  color: white;
-  box-shadow: 0 2px 6px rgba(84, 112, 198, 0.3);
-}
-
-/* 网格布局包装器 */
-.grid-layout-wrapper {
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-  margin-top: 20px;
-}
-
-/* 统一职位选择器 */
-.unified-job-selector {
-  background: linear-gradient(180deg, #fff 0%, #fafafa 100%);
-  border-radius: 16px;
-  padding: 24px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
-  border: 1px solid #eef3f6;
-  color: #2c3e50;
-}
-
-.selector-header {
-  margin-bottom: 20px;
-}
-
-.selector-header h3 {
-  margin: 0 0 8px 0;
-  font-size: 20px;
-  font-weight: 700;
-  color: #0b4a8a;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.selector-hint {
-  margin: 0;
-  font-size: 14px;
-  color: #666;
-  font-weight: 400;
-}
-
-.selector-body {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-.unified-inputs {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
-}
-
-.input-group {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.input-group label {
-  font-size: 13px;
-  font-weight: 600;
-  color: #0b4a8a;
-  letter-spacing: 0.5px;
-}
-
-.unified-input {
-  width: 100%;
-}
-
-.unified-input .custom-select-wrapper .select-input {
-  padding: 12px 36px 12px 16px;
-  border: 1px solid #eef3f6;
-  border-radius: 10px;
-  font-size: 14px;
-  background: #fff;
-  color: #2c3e50;
-  transition: all 0.3s;
-}
-
-.unified-input .custom-select-wrapper .select-input::placeholder {
-  color: #999;
-}
-
-.unified-input .custom-select-wrapper .select-input:hover {
-  background: #fafafa;
-  border-color: #5470c6;
-}
-
-.unified-input .custom-select-wrapper .select-input:focus {
-  outline: none;
-  background: #fff;
-  border-color: #5470c6;
-  box-shadow: 0 0 0 3px rgba(84, 112, 198, 0.1);
-}
-
-
-
-.unified-actions {
-  display: flex;
-  gap: 12px;
-  justify-content: center;
-}
-
-.unified-btn {
-  padding: 12px 24px;
-  border: none;
-  border-radius: 10px;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.3s;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-}
-
-.unified-btn span {
-  font-size: 16px;
-}
-
-.unified-btn-sync {
-  background: #5470c6;
-  color: white;
-}
-
-.unified-btn-sync:hover:not(:disabled) {
-  background: #4558a3;
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(84, 112, 198, 0.3);
-}
-
-.unified-btn-load {
-  background: #5470c6;
-  color: white;
-}
-
-.unified-btn-load:hover:not(:disabled) {
-  background: #4558a3;
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(84, 112, 198, 0.3);
-}
-
-.unified-btn-clear {
-  background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
-  color: white;
-}
-
-.unified-btn-clear:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(250, 112, 154, 0.4);
-}
-
-.unified-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  transform: none !important;
-}
-
-/* 网格布局 */
-.grid-layout {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 24px;
-  padding: 20px;
-  background: rgb(225, 214, 207);
-  border-radius: 16px;
-}
-
-.grid-item {
-  background: white;
-  border-radius: 16px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
-  overflow: hidden;
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-  border: 1px solid rgba(84, 112, 198, 0.1);
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  min-height: 650px;
-}
-
-.grid-item::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 3px;
-  background: linear-gradient(90deg, #5470c6, #4558a3, #5470c6);
-  opacity: 0;
-  transition: opacity 0.3s;
-}
-
-.grid-item:hover::before {
-  opacity: 1;
-}
-
-.grid-item:hover {
-  box-shadow: 0 8px 32px rgba(84, 112, 198, 0.15);
-  transform: translateY(-4px);
-  border-color: rgba(84, 112, 198, 0.3);
-}
-
-.grid-item-full {
-  grid-column: 1 / -1;
-}
-
-.grid-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 18px 24px;
-  background: linear-gradient(180deg, #fff 0%, #fafafa 100%);
-  border-bottom: 1px solid #eef3f6;
-  color: #0b4a8a;
-  font-weight: 600;
-  font-size: 16px;
-  position: relative;
-  overflow: hidden;
-}
-
-.grid-header::before {
-  content: '';
-  position: absolute;
-  top: -50%;
-  right: -50%;
-  width: 200%;
-  height: 200%;
-  background: radial-gradient(circle, rgba(255, 255, 255, 0.1) 0%, transparent 70%);
-  animation: shimmer 3s infinite;
-}
-
-@keyframes shimmer {
-  0%, 100% { transform: translate(0, 0); }
-  50% { transform: translate(-30%, -30%); }
-}
-
-.grid-title {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 16px;
-  letter-spacing: 0.3px;
-  z-index: 1;
-}
-
-.grid-title::before {
-  content: '';
-  width: 4px;
-  height: 20px;
-  background: white;
-  border-radius: 2px;
-  opacity: 0.8;
-}
-
-.expand-btn {
-  background: rgba(255, 255, 255, 0.15);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  color: white;
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 18px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.3s;
-  z-index: 1;
-}
-
-.expand-btn:hover {
-  background: rgba(255, 255, 255, 0.25);
-  transform: scale(1.15) rotate(90deg);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-}
-
-.grid-content-compact {
-  padding: 20px;
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  background: linear-gradient(to bottom, #ffffff 0%, #f8f9fa 100%);
-  overflow: hidden;
-}
-
-.grid-content-wide {
-  flex: 1;
-}
-
-/* 紧凑控制面板 */
-.compact-controls {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
+  gap: 14px;
   padding: 16px;
-  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-  border-radius: 12px;
-  align-items: center;
-  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.04);
-  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 16px;
+  background: radial-gradient(circle at 12% 12%, #f3f7ff 0%, #eef3fb 35%, #e9eef8 100%);
 }
 
-.compact-mode {
+.hero-card,
+.selector-card,
+.panel-card,
+.stats-bar {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(80, 111, 174, 0.12);
+  border-radius: 14px;
+  box-shadow: 0 8px 20px rgba(64, 89, 138, 0.08);
+}
+
+.hero-card {
   display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 16px 18px;
   gap: 16px;
-  align-items: center;
-  padding: 6px 12px;
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
-.compact-mode label {
+.hero-card h2 {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  color: #0d2a57;
+  font-size: 30px;
+  line-height: 1.2;
+}
+
+.hero-card p {
+  margin: 8px 0 0;
+  color: #4e6388;
+  font-size: 15px;
+}
+
+.hero-actions {
   display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.title-icon,
+.inline-icon {
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #2f6df6;
+  flex: 0 0 auto;
+}
+
+.title-icon svg,
+.inline-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.period-picker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #234677;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.picker-label {
+  display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 13px;
-  color: #495057;
-  cursor: pointer;
-  white-space: nowrap;
-  font-weight: 500;
-  transition: color 0.2s;
 }
 
-.compact-mode label:hover {
-  color: #5470c6;
+.period-picker select {
+  border: 1px solid #c9d7ef;
+  border-radius: 10px;
+  background: #f7f9fe;
+  color: #163a71;
+  padding: 8px 12px;
 }
 
-.compact-mode input[type="radio"] {
-  cursor: pointer;
-  width: 16px;
-  height: 16px;
-  accent-color: #5470c6;
-}
-
-.compact-inputs {
-  display: flex;
-  gap: 10px;
-  flex: 1;
-  min-width: 200px;
-}
-
-/* 可拖拽输入框包装器 */
-.draggable-input-wrapper {
-  flex: 1;
-  position: relative;
-  display: flex;
+.selector-card {
+  padding: 14px 16px;
+  display: grid;
+  grid-template-columns: 220px 1fr auto;
   align-items: center;
+  gap: 12px;
 }
 
-.drag-handle {
-  position: absolute;
-  left: 4px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: #999;
-  font-size: 12px;
-  cursor: grab;
-  user-select: none;
-  opacity: 0;
-  transition: opacity 0.2s;
-  pointer-events: none;
-}
-
-.draggable-input-wrapper:hover .drag-handle {
-  opacity: 1;
-}
-
-.compact-input {
-  flex: 1;
-  padding: 8px 12px 8px 24px;
-  border: 2px solid #e0e0e0;
-  border-radius: 8px;
-  font-size: 13px;
-  min-width: 80px;
-  background: white;
-  transition: all 0.3s;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
-}
-
-.draggable-input {
-  cursor: grab;
-}
-
-.draggable-input:active {
-  cursor: grabbing;
-}
-
-.compact-input:hover {
-  border-color: #5470c6;
-}
-
-.compact-input:focus {
-  outline: none;
-  border-color: #5470c6;
-  box-shadow: 0 0 0 3px rgba(84, 112, 198, 0.1), 0 2px 8px rgba(84, 112, 198, 0.15);
-  transform: translateY(-1px);
-}
-
-
-/* 拖拽时的视觉反馈 */
-.grid-item {
-  transition: all 0.3s;
-}
-
-.grid-item:has(.compact-input:active) {
-  opacity: 0.8;
-}
-
-.compact-actions {
-  display: flex;
-  gap: 8px;
-}
-
-.compact-btn {
-  padding: 8px 16px;
-  border: none;
-  border-radius: 8px;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.3s;
-  white-space: nowrap;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
-  position: relative;
-  overflow: hidden;
-}
-
-.compact-btn::before {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 0;
-  height: 0;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.3);
-  transform: translate(-50%, -50%);
-  transition: width 0.6s, height 0.6s;
-}
-
-.compact-btn:hover::before {
-  width: 300px;
-  height: 300px;
-}
-
-.compact-btn-primary {
-  background: #5470c6;
-  color: white;
-}
-
-.compact-btn-primary:hover:not(:disabled) {
-  background: #4558a3;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(84, 112, 198, 0.3);
-}
-
-.compact-btn-primary:active:not(:disabled) {
-  transform: translateY(0);
-}
-
-.compact-btn-primary:disabled {
-  background: linear-gradient(135deg, #ccc 0%, #999 100%);
-  cursor: not-allowed;
-  opacity: 0.6;
-}
-
-.compact-btn-secondary {
-  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-  color: #495057;
-}
-
-.compact-btn-secondary:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-}
-
-.compact-btn-warning {
-  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-  color: white;
-}
-
-.compact-btn-warning:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(245, 87, 108, 0.4);
-}
-
-.compact-chart {
-  flex: 1;
-  min-height: 450px;
-  overflow: auto;
-  border-radius: 12px;
-  background: white;
-  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.03);
-  border: 1px solid rgba(0, 0, 0, 0.05);
-  position: relative;
-}
-
-.compact-chart::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-.compact-chart::-webkit-scrollbar-track {
-  background: #f1f1f1;
-  border-radius: 4px;
-}
-
-.compact-chart::-webkit-scrollbar-thumb {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border-radius: 4px;
-}
-
-.compact-chart::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(135deg, #5568d3 0%, #653a8e 100%);
-}
-
-/* 视图切换标签 */
-.view-tabs {
-  display: flex;
-  gap: 10px;
-  margin-bottom: 20px;
-  border-bottom: 2px solid #e0e0e0;
-}
-
-.view-tab {
-  padding: 12px 24px;
-  background: transparent;
-  border: none;
-  border-bottom: 3px solid transparent;
-  cursor: pointer;
-  font-size: 15px;
-  color: #666;
-  transition: all 0.3s;
-  font-weight: 500;
-}
-
-.view-tab:hover {
-  color: #5470c6;
-  background: rgba(84, 112, 198, 0.05);
-}
-
-.view-tab.active {
-  color: #5470c6;
-  border-bottom-color: #5470c6;
-  font-weight: 600;
-}
-
-.view-content {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-/* 模式选择器 */
-.mode-selector {
-  padding: 20px;
-  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-  border: 1px solid #e0e0e0;
-}
-
-.mode-group {
-  display: flex;
-  gap: 30px;
-  margin-bottom: 20px;
-}
-
-.mode-group label {
-  display: flex;
+.selector-title {
+  display: inline-flex;
   align-items: center;
   gap: 8px;
-  font-size: 14px;
-  font-weight: 500;
-  color: #495057;
-  cursor: pointer;
+  font-weight: 700;
+  color: #173c72;
+  font-size: 19px;
 }
 
-.mode-group input[type="radio"] {
-  cursor: pointer;
-  width: 16px;
-  height: 16px;
-}
-
-/* 维度选择器 */
-.dimension-selector {
-  margin-top: 20px;
-  padding-top: 20px;
-  border-top: 1px solid #e0e0e0;
-}
-
-.dimension-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #495057;
-  margin-bottom: 12px;
-}
-
-.dimension-group {
-  display: flex;
-  gap: 30px;
-  flex-wrap: wrap;
-}
-
-.dimension-group label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
-  font-weight: 500;
-  color: #495057;
-  cursor: pointer;
-}
-
-.dimension-group input[type="checkbox"] {
-  cursor: pointer;
-  width: 16px;
-  height: 16px;
-}
-
-.dimension-hint {
-  margin-top: 10px;
-  font-size: 13px;
-  color: #f39c12;
-  font-weight: 500;
-}
-
-.chart-description {
-  margin-bottom: 20px;
-  color: #666;
-  line-height: 1.6;
-}
-
-.chart-description strong {
-  color: #5470c6;
-  font-weight: 600;
-}
-
-.job-selector {
-  padding: 20px;
-  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-  border: 1px solid #e0e0e0;
-}
-
-.selector-group {
-  display: flex;
-  align-items: center;
+.selector-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(180px, 1fr));
   gap: 10px;
-  margin-bottom: 15px;
 }
-
-.selector-group label {
-  min-width: 60px;
-  font-size: 14px;
-  font-weight: 600;
-  color: #495057;
-}
-
-.job-input {
-  flex: 1;
-  padding: 10px 15px;
-  border: 2px solid #ddd;
-  border-radius: 6px;
-  font-size: 14px;
-  transition: all 0.3s;
-}
-
-.job-input:focus {
-  outline: none;
-  border-color: #5470c6;
-  box-shadow: 0 0 0 3px rgba(84, 112, 198, 0.1);
-}
-
 
 .selector-actions {
   display: flex;
-  gap: 10px;
-  margin-top: 20px;
-  padding-top: 20px;
-  border-top: 1px solid #e0e0e0;
+  gap: 8px;
 }
 
-.btn {
-  padding: 10px 24px;
-  border: none;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 600;
+.primary-btn,
+.ghost-btn {
+  border-radius: 10px;
+  border: 1px solid transparent;
+  padding: 9px 16px;
+  font-weight: 700;
   cursor: pointer;
-  transition: all 0.3s;
 }
 
-.btn-primary {
-  background: #5470c6;
-  color: white;
-  box-shadow: 0 2px 6px rgba(84, 112, 198, 0.3);
+.btn-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
-.btn-primary:hover:not(:disabled) {
-  background: #4558a3;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(84, 112, 198, 0.4);
+.btn-inline .inline-icon {
+  width: 16px;
+  height: 16px;
 }
 
-.btn-secondary {
-  background: #f0f0f0;
-  color: #666;
-  border: 1px solid #ddd;
+.primary-btn {
+  color: #fff;
+  background: linear-gradient(135deg, #2f6df6 0%, #1b57dc 100%);
+  box-shadow: 0 6px 14px rgba(47, 109, 246, 0.25);
 }
 
-.btn-secondary:hover:not(:disabled) {
-  background: #e0e0e0;
-}
-
-.btn:disabled {
-  opacity: 0.6;
+.primary-btn:disabled {
+  opacity: 0.5;
   cursor: not-allowed;
+}
+
+.ghost-btn {
+  color: #20457a;
+  background: #f4f7fd;
+  border-color: #c7d5ec;
+}
+
+.three-panel-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+.panel-card {
+  display: flex;
+  flex-direction: column;
+  min-height: 620px;
+  padding: 12px;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.panel-header h3 {
+  margin: 0;
+  color: #132f60;
+  font-size: 30px;
+}
+
+.panel-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.panel-title .title-icon {
+  width: 22px;
+  height: 22px;
+}
+
+.tiny-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #315d98;
+  background: #edf3ff;
+  border: 1px solid #c9daf4;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 5px 10px;
+  border-radius: 999px;
+}
+
+.tiny-badge .inline-icon {
+  width: 14px;
+  height: 14px;
+  color: #315d98;
+}
+
+.panel-subtitle {
+  margin: 6px 0 10px;
+  color: #4a5f84;
+  font-size: 13px;
+}
+
+.panel-body {
+  flex: 1;
+  min-height: 0;
+}
+
+.chart-shell {
+  border: 1px solid #dbe6f7;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fbfdff;
+}
+
+.map-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border: 1px solid #dbe6f7;
+  border-radius: 12px;
+  background: #ffffff;
+  padding: 10px;
+}
+
+.map-controls {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(140px, 1fr));
+  gap: 8px 10px;
+  align-items: end;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid #d7e3f7;
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+
+.ctl {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.ctl span {
+  font-size: 12px;
+  color: #294f84;
+  font-weight: 700;
+}
+
+.ctl-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ctl-ico {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  display: inline-block;
+  border: 1.5px solid #5f84ba;
+  background: #f3f8ff;
+  position: relative;
+}
+
+.ctl-ico.width::before,
+.ctl-ico.height::before,
+.ctl-ico.layout::before,
+.ctl-ico.zoom::before,
+.ctl-ico.aspect::before,
+.ctl-ico.centerx::before,
+.ctl-ico.centery::before {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  border-radius: 2px;
+  background: rgba(47, 109, 246, 0.24);
+}
+
+.ctl-ico.height::before {
+  inset: 1px 4px;
+}
+
+.ctl-ico.layout::before {
+  inset: 4px 1px 4px 1px;
+}
+
+.ctl-ico.zoom::before {
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  top: 2px;
+  left: 2px;
+}
+
+.ctl-ico.zoom::after {
+  content: '';
+  position: absolute;
+  width: 5px;
+  height: 1.5px;
+  background: #5f84ba;
+  transform: rotate(45deg);
+  right: 0;
+  bottom: 1px;
+}
+
+.ctl-ico.aspect::before {
+  inset: 4px 2px;
+}
+
+.ctl-ico.centerx::before {
+  inset: 2px 1px;
+}
+
+.ctl-ico.centery::before {
+  inset: 1px 2px;
+}
+
+.ctl input[type='range'] {
+  width: 100%;
+}
+
+.mini-btn {
+  padding: 7px 10px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.mini-btn.with-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.nav-ico {
+  width: 13px;
+  height: 13px;
+  display: inline-block;
+  position: relative;
+  border: 1.5px solid #4f76ad;
+  border-radius: 999px;
+}
+
+.nav-ico::before {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border: solid #4f76ad;
+  border-width: 0 1.5px 1.5px 0;
+  transform: rotate(45deg);
+}
+
+.nav-ico.zoom-in::after,
+.nav-ico.zoom-out::after {
+  content: '';
+  position: absolute;
+  width: 5px;
+  height: 1.5px;
+  background: #4f76ad;
+  left: 3px;
+  top: 5.2px;
+}
+
+.nav-ico.zoom-in::before {
+  border: none;
+  width: 1.5px;
+  height: 5px;
+  background: #4f76ad;
+  left: 5px;
+  top: 3px;
   transform: none;
 }
 
-.chart-section {
-  flex: 1;
-  min-height: 600px;
-  background: white;
-  border-radius: 12px;
-  padding: 20px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+.nav-ico.zoom-out::before {
+  border: none;
+}
+
+.nav-ico.left::before {
+  inset: 3px 4px 3px 2px;
+  transform: rotate(135deg);
+}
+
+.nav-ico.right::before {
+  inset: 3px 2px 3px 4px;
+  transform: rotate(-45deg);
+}
+
+.nav-ico.up::before {
+  inset: 2px 3px 4px 3px;
+  transform: rotate(-135deg);
+}
+
+.nav-ico.down::before {
+  inset: 4px 3px 2px 3px;
+  transform: rotate(45deg);
+}
+
+.nav-ico.reset::before {
+  border: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  border: 1.5px solid #4f76ad;
+  border-right-color: transparent;
+  left: 2px;
+  top: 2px;
+  transform: rotate(-30deg);
+}
+
+.nav-ico.fit::before {
+  inset: 2px;
+  border: none;
+  border-radius: 1px;
+  background: rgba(79, 118, 173, 0.2);
+  transform: none;
+}
+
+.map-nav-buttons {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.map-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  grid-column: 1 / -1;
+  font-size: 12px;
+  color: #5a7093;
+  font-weight: 600;
+}
+
+.hint-ico {
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  border: 1.5px solid #5a7eaf;
+  display: inline-block;
+  position: relative;
+}
+
+.hint-ico::before {
+  content: 'i';
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  color: #5a7eaf;
+  font-weight: 700;
+}
+
+.map-resize-shell {
+  resize: both;
+  overflow: hidden;
+  max-width: 100%;
+  min-width: 55%;
+  min-height: 360px;
+  border-radius: 10px;
+  border: 1px solid #d5e1f5;
+  align-self: center;
+}
+
+.summary-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 800;
+  margin-bottom: 4px;
+}
+
+.summary-ico,
+.drill-ico {
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  border: 1.5px solid #4f76ad;
+  display: inline-block;
+  position: relative;
+}
+
+.summary-ico::before {
+  content: '';
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: #4f76ad;
+  left: 4px;
+  top: 4px;
+}
+
+.drill-ico::before {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 2px;
+  width: 4px;
+  height: 8px;
+  border: 1.5px solid #4f76ad;
+  border-top: none;
+}
+
+.summary-line {
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.city-summary-box {
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid #c8d7f0;
+  border-radius: 10px;
+  padding: 8px 10px;
+  color: #274d81;
+}
+
+.map-legend {
+  display: grid;
+  gap: 6px;
+  width: fit-content;
+  background: rgba(255, 255, 255, 0.86);
+  border: 1px solid #c8d7f0;
+  border-radius: 10px;
+  padding: 8px 10px;
+  color: #294f84;
+  font-size: 12px;
+  font-weight: 600;
+  margin-left: auto;
+}
+
+.legend-item {
+  border: 1px solid rgba(92, 124, 177, 0.28);
+  background: rgba(246, 250, 255, 0.92);
+  color: #294f84;
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: left;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.legend-item:hover {
+  border-color: rgba(47, 109, 246, 0.42);
+  transform: translateY(-1px);
+}
+
+.legend-item.active {
+  border-color: rgba(47, 109, 246, 0.55);
+  background: linear-gradient(135deg, rgba(224, 238, 255, 0.95), rgba(240, 248, 255, 0.95));
+  box-shadow: 0 3px 10px rgba(47, 109, 246, 0.18);
+}
+
+.legend-status {
+  margin-top: 2px;
+  color: #4c6996;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: right;
+}
+
+.city-drilldown {
+  border: 1px solid #d6e2f6;
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.drilldown-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #123a72;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.drilldown-meta {
+  margin-top: 2px;
+  color: #4d6690;
+  font-size: 12px;
+}
+
+.drilldown-grid {
+  margin-top: 7px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.drill-cell {
+  border-radius: 8px;
+  border: 1px solid #d5e2f6;
+  padding: 6px 7px;
+  background: #f9fbff;
+}
+
+.drill-cell.slot-a {
+  border-left: 3px solid var(--job-a);
+}
+
+.drill-cell.slot-b {
+  border-left: 3px solid var(--job-b);
+}
+
+.drill-cell.slot-c {
+  border-left: 3px solid var(--job-c);
+}
+
+.cell-head {
+  color: #214980;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.cell-main {
+  color: #163c72;
+  font-size: 14px;
+  font-weight: 800;
+  margin-top: 2px;
+}
+
+.cell-sub {
+  color: #5a7093;
+  font-size: 11px;
+  margin-top: 2px;
+}
+
+.dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  margin-right: 6px;
+}
+
+.dot.a {
+  background: var(--job-a);
+}
+
+.dot.b {
+  background: var(--job-b);
+}
+
+.dot.c {
+  background: var(--job-c);
+}
+
+.stats-bar {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  padding: 8px;
+}
+
+.stat-item {
+  background: #f7faff;
+  border: 1px solid #d9e4f8;
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.stat-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #5b6d8d;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.stat-ico {
+  width: 13px;
+  height: 13px;
+  border-radius: 4px;
+  display: inline-block;
+  background: #dbe8fb;
+  border: 1px solid #9bb8e0;
+  position: relative;
+}
+
+.stat-ico::before {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border-radius: 2px;
+  background: #5f88bf;
+}
+
+.stat-ico.industry::before {
+  border-radius: 999px;
+}
+
+.stat-ico.city::before {
+  inset: 2px 4px;
+}
+
+.stat-ico.dimension::before {
+  inset: 4px 2px;
+}
+
+.stat-value {
+  color: #18386b;
+  font-size: 25px;
+  font-weight: 700;
+}
+
+@media (max-width: 1200px) {
+  .hero-card h2 {
+    font-size: 26px;
+  }
+
+  .panel-header h3 {
+    font-size: 24px;
+  }
+
+  .selector-card {
+    grid-template-columns: 1fr;
+  }
+
+  .selector-actions {
+    justify-content: flex-end;
+  }
+
+  .three-panel-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .panel-card {
+    min-height: 560px;
+  }
+
+  .drilldown-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .map-controls {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
 }
 </style>
-
