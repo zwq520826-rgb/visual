@@ -160,3 +160,48 @@ def get_parallel_coordinates_data():
         return ResponseBuilder.internal_error("服务器内部错误", {"type": "INTERNAL_ERROR", "details": str(e)})
 
 
+@salary_3d_bp.route('/charts/salary-clusters', methods=['GET'])
+def get_salary_clusters():
+    """获取职位薪资模式聚类图数据"""
+    try:
+        n_clusters = request.args.get('n_clusters', default=5, type=int)
+        algorithm = request.args.get('algorithm', default='gmm', type=str)
+        sample_size = request.args.get('sample_size', default=12000, type=int)
+        data = salary_3d_service.get_salary_cluster_data(
+            n_clusters=n_clusters,
+            algorithm=algorithm,
+            sample_size=sample_size
+        )
+        return ResponseBuilder.success("获取薪资模式聚类数据成功", data)
+    except Exception as e:
+        logger.error(f"获取薪资模式聚类数据失败: {e}", exc_info=True)
+        return ResponseBuilder.internal_error("服务器内部错误", {"type": "INTERNAL_ERROR", "details": str(e)})
+
+
+@salary_3d_bp.route('/charts/salary-clusters/city-assignments', methods=['GET'])
+def get_salary_cluster_city_assignments():
+    """获取城市归属簇结果（用于导出JSON或单独展示）"""
+    try:
+        n_clusters = request.args.get('n_clusters', default=5, type=int)
+        algorithm = request.args.get('algorithm', default='gmm', type=str)
+        sample_size = request.args.get('sample_size', default=12000, type=int)
+
+        data = salary_3d_service.get_salary_cluster_data(
+            n_clusters=n_clusters,
+            algorithm=algorithm,
+            sample_size=sample_size
+        )
+
+        meta = data.get("metadata", {}) if isinstance(data, dict) else {}
+        payload = {
+            "n_clusters": int(meta.get("n_clusters", 0) or 0),
+            "algorithm": str(meta.get("cluster_algorithm", algorithm)),
+            "sample_size": int(meta.get("sample_size", sample_size) or 0),
+            "city_cluster_json_file": meta.get("city_cluster_json_file"),
+            "city_cluster_count": int(meta.get("city_cluster_count", 0) or 0),
+            "cities": data.get("city_cluster_assignments", []) if isinstance(data, dict) else []
+        }
+        return ResponseBuilder.success("获取城市归属簇数据成功", payload)
+    except Exception as e:
+        logger.error(f"获取城市归属簇数据失败: {e}", exc_info=True)
+        return ResponseBuilder.internal_error("服务器内部错误", {"type": "INTERNAL_ERROR", "details": str(e)})

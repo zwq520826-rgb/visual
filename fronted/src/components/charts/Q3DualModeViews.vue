@@ -36,6 +36,14 @@
       </div>
 
       <div class="toolbar-item">
+        <label>轮廓模式</label>
+        <select v-model="contourMode" @change="renderScatter">
+          <option value="circle">圆形</option>
+          <option value="original">原始</option>
+        </select>
+      </div>
+
+      <div class="toolbar-item">
         <label>平行模式</label>
         <select v-model="parallelMode" @change="renderParallel">
           <option value="centroid">质心聚合</option>
@@ -123,6 +131,7 @@ const nClusters = ref(5)
 const algorithm = ref('gmm')
 const sampleSize = ref(12000)
 const coordMode = ref('pca')
+const contourMode = ref('circle')
 const parallelMode = ref('centroid')
 
 const activeClusterId = ref(null)
@@ -152,12 +161,24 @@ const projectionMethodText = computed(() => {
 })
 
 const coordModeLabel = computed(() => (
-  coordMode.value === 'business'
-    ? '业务坐标(薪资/门槛)'
-    : `${projectionMethodText.value}坐标`
+  `${
+    coordMode.value === 'business'
+      ? '业务坐标(薪资/门槛)'
+      : `${projectionMethodText.value}坐标`
+  } · ${
+    contourMode.value === 'circle' ? '圆形轮廓' : '原始轮廓'
+  }`
 ))
-const axisXName = computed(() => (coordMode.value === 'business' ? '中位薪资(K)' : 'PC1'))
-const axisYName = computed(() => (coordMode.value === 'business' ? '门槛指数' : 'PC2'))
+const axisXName = computed(() => (
+  coordMode.value === 'business'
+    ? '中位薪资(K)'
+    : '薪资综合指数（投影）'
+))
+const axisYName = computed(() => (
+  coordMode.value === 'business'
+    ? '门槛指数'
+    : '门槛综合指数（投影）'
+))
 
 const parallelModeLabel = computed(() => parallelMode.value === 'centroid' ? '方案A：质心聚合' : '方案B：分层抽样')
 
@@ -170,6 +191,31 @@ const parallelRows = computed(() => {
 
 const clusterPalette = ['#2d7cff', '#ef4444', '#00b894', '#f59e0b', '#7b61ff', '#14b8a6', '#f97316', '#ec4899']
 const clusterColor = (cid) => clusterPalette[Math.abs(Number(cid) || 0) % clusterPalette.length]
+const hexToRgb = (hex) => {
+  const h = String(hex || '').replace('#', '')
+  if (h.length !== 6) return [45, 124, 255]
+  return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)]
+}
+const rgba = (hex, alpha) => {
+  const [r, g, b] = hexToRgb(hex)
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`
+}
+const pointGradientColor = (hex, visible) => {
+  const inner = visible ? 0.92 : 0.15
+  const mid = visible ? 0.52 : 0.08
+  const outer = visible ? 0.26 : 0.04
+  return {
+    type: 'radial',
+    x: 0.45,
+    y: 0.4,
+    r: 0.85,
+    colorStops: [
+      { offset: 0, color: rgba(hex, inner) },
+      { offset: 0.62, color: rgba(hex, mid) },
+      { offset: 1, color: rgba(hex, outer) }
+    ]
+  }
+}
 
 const formatSalary = (v) => `${Number(v || 0).toFixed(1)}K`
 
@@ -271,36 +317,137 @@ const axisRange = (values, padRatio = 0.08) => {
   return { min: minVal - pad, max: maxVal + pad }
 }
 
+const circularizeRows = (rows) => {
+  if (!Array.isArray(rows) || rows.length < 3 || contourMode.value !== 'circle') return rows
+
+  const vals = rows.map((r) => [Number(r.value?.[0] || 0), Number(r.value?.[1] || 0)])
+  const xs = vals.map((v) => v[0])
+  const ys = vals.map((v) => v[1])
+  const meanX = xs.reduce((a, b) => a + b, 0) / xs.length
+  const meanY = ys.reduce((a, b) => a + b, 0) / ys.length
+  const stdX = Math.sqrt(xs.reduce((a, b) => a + (b - meanX) ** 2, 0) / Math.max(1, xs.length - 1)) || 1
+  const stdY = Math.sqrt(ys.reduce((a, b) => a + (b - meanY) ** 2, 0) / Math.max(1, ys.length - 1)) || 1
+
+  const polar = vals.map(([x, y], i) => {
+    const nx = (x - meanX) / stdX
+    const ny = (y - meanY) / stdY
+    const r = Math.sqrt(nx * nx + ny * ny)
+    const theta = Math.atan2(ny, nx)
+    return { i, r, theta }
+  })
+
+  const sorted = [...polar].sort((a, b) => a.r - b.r)
+  const rankMap = new Map()
+  sorted.forEach((p, idx) => rankMap.set(p.i, idx))
+  const maxR = Math.max(...polar.map((p) => p.r), 1e-6)
+  const targetMax = 3.0
+  const blend = 0.64
+
+  return rows.map((row, idx) => {
+    const p = polar[idx]
+    const rank = Number(rankMap.get(idx) || 0)
+    const q = (rank + 0.5) / rows.length
+    const rDisc = Math.sqrt(q) * targetMax
+    const rOrig = (p.r / maxR) * targetMax
+    const rNew = rOrig * (1 - blend) + rDisc * blend
+    const xNew = rNew * Math.cos(p.theta)
+    const yNew = rNew * Math.sin(p.theta)
+    return {
+      ...row,
+      value: [xNew, yNew]
+    }
+  })
+}
+
 const buildDuplicateAwareJitter = () => {
-  const buckets = new Map()
+  const basePoints = []
+  let minX = Number.POSITIVE_INFINITY
+  let maxX = Number.NEGATIVE_INFINITY
+  let minY = Number.POSITIVE_INFINITY
+  let maxY = Number.NEGATIVE_INFINITY
+
   points.value.forEach((p, i) => {
     const pid = Number(p.point_id ?? i)
     const [bx, by] = baseCoordOfPoint(p)
+    const x = Number(bx || 0)
+    const y = Number(by || 0)
+    basePoints.push({ pid, x, y, cid: Number(p.cluster_id || 0) })
+    if (x < minX) minX = x
+    if (x > maxX) maxX = x
+    if (y < minY) minY = y
+    if (y > maxY) maxY = y
+  })
+
+  const spanX = Math.max(1e-6, maxX - minX)
+  const spanY = Math.max(1e-6, maxY - minY)
+  const gridX = coordMode.value === 'pca' ? 56 : 72
+  const gridY = coordMode.value === 'pca' ? 44 : 52
+  const cellX = spanX / gridX
+  const cellY = spanY / gridY
+  const densityCellMap = new Map()
+
+  basePoints.forEach((pt) => {
+    const gx = Math.floor((pt.x - minX) / Math.max(1e-6, cellX))
+    const gy = Math.floor((pt.y - minY) / Math.max(1e-6, cellY))
+    const k = `${gx}|${gy}`
+    densityCellMap.set(k, (densityCellMap.get(k) || 0) + 1)
+  })
+
+  const densityRawByPid = new Map()
+  let maxDensity = 1
+  basePoints.forEach((pt) => {
+    const gx = Math.floor((pt.x - minX) / Math.max(1e-6, cellX))
+    const gy = Math.floor((pt.y - minY) / Math.max(1e-6, cellY))
+    const k = `${gx}|${gy}`
+    const d = Number(densityCellMap.get(k) || 1)
+    densityRawByPid.set(pt.pid, d)
+    if (d > maxDensity) maxDensity = d
+  })
+
+  const buckets = new Map()
+  basePoints.forEach((pt) => {
     // 以原始坐标+簇分桶，避免不同簇完全压在同一点位
     const key = [
-      Number(bx || 0).toFixed(4),
-      Number(by || 0).toFixed(4),
-      Number(p.cluster_id || 0)
+      Number(pt.x || 0).toFixed(4),
+      Number(pt.y || 0).toFixed(4),
+      Number(pt.cid || 0)
     ].join('|')
     if (!buckets.has(key)) buckets.set(key, [])
-    buckets.get(key).push(pid)
+    buckets.get(key).push(pt.pid)
   })
 
   const jitterByPid = new Map()
   const dupCountByPid = new Map()
+  const densityNormByPid = new Map()
   const golden = Math.PI * (3 - Math.sqrt(5))
 
   buckets.forEach((pidList) => {
     const n = pidList.length
     const sorted = [...pidList].sort((a, b) => a - b)
-    const spread = coordMode.value === 'pca'
+    const spreadDup = coordMode.value === 'pca'
       ? Math.min(1.3, 1 + 0.08 * Math.log2(n + 1))
       : Math.min(2.1, 1 + 0.18 * Math.log2(n + 1))
 
     sorted.forEach((pid, idx) => {
       dupCountByPid.set(pid, n)
+      const density = Number(densityRawByPid.get(pid) || 1)
+      const densityNorm = (density - 1) / Math.max(1, maxDensity - 1)
+      densityNormByPid.set(pid, densityNorm)
+      const spreadDensity = 1 + densityNorm * (coordMode.value === 'pca' ? 0.45 : 0.28)
+      const spread = spreadDup * spreadDensity
       if (n <= 1) {
-        jitterByPid.set(pid, [0, 0])
+        if (density <= 2) {
+          jitterByPid.set(pid, [0, 0])
+          return
+        }
+        // 非重复点但处在密集网格时，给一个轻微抖动，降低完全重叠
+        const a = (Number(pid) + 1) * golden
+        const r0 = coordMode.value === 'pca' ? 0.008 : 0.018
+        const r = r0 * (1 + densityNorm * 1.7)
+        const ratioY = coordMode.value === 'pca' ? 0.9 : 0.35
+        const dx = Math.cos(a) * r
+        const dy = Math.sin(a) * r * ratioY
+        jitterByPid.set(pid, [dx, dy])
         return
       }
       // Sunflower 排布：重复越多，半径越大，但整体仍围绕原坐标
@@ -314,7 +461,7 @@ const buildDuplicateAwareJitter = () => {
     })
   })
 
-  return { jitterByPid, dupCountByPid }
+  return { jitterByPid, dupCountByPid, densityRawByPid, densityNormByPid }
 }
 
 const renderScatter = () => {
@@ -322,7 +469,7 @@ const renderScatter = () => {
     renderError.value = ''
     if (!scatterRef.value || !points.value.length) return
     if (!scatterChart) scatterChart = echarts.init(scatterRef.value)
-    const { jitterByPid, dupCountByPid } = buildDuplicateAwareJitter()
+    const { jitterByPid, dupCountByPid, densityRawByPid, densityNormByPid } = buildDuplicateAwareJitter()
     const dense = points.value.length >= 10000
     const countVals = points.value.map((p) => Math.log1p(Math.max(0, Number(p?.features?.records_count || 0))))
     const minLogCount = Math.min(...countVals)
@@ -337,25 +484,40 @@ const renderScatter = () => {
       const [jx, jy] = jitterByPid.get(pid) || [0, 0]
       const rec = Math.log1p(Math.max(0, Number(p?.features?.records_count || 0)))
       const norm = (rec - minLogCount) / logSpan
-      const sized = 2.1 + norm * 4.1
+      const localDensity = Number(densityRawByPid.get(pid) || 1)
+      const densityNorm = Number(densityNormByPid.get(pid) || 0)
+      const sizeFromDemand = 2.1 + norm * 4.1
+      const sizeDensityFactor = dense ? (1 - densityNorm * 0.42) : (1 - densityNorm * 0.25)
+      const sized = Math.max(1.8, sizeFromDemand * sizeDensityFactor)
+      const baseOpacity = dense ? 0.84 : 0.92
+      const densePenalty = densityNorm * (dense ? 0.5 : 0.32)
+      const visibleOpacity = Math.max(dense ? 0.2 : 0.35, baseOpacity - densePenalty)
       return {
         value: [Number(bx || 0) + jx, Number(by || 0) + jy],
         baseValue: [Number(bx || 0), Number(by || 0)],
         raw: p,
         pid,
         duplicateCount: Number(dupCountByPid.get(pid) || 1),
+        localDensity,
+        densityNorm,
+        clusterBaseColor: clusterColor(p.cluster_id),
         itemStyle: {
-          color: clusterColor(p.cluster_id),
-          opacity: visible ? (dense ? 0.42 : 0.58) : 0.05
+          color: pointGradientColor(clusterColor(p.cluster_id), visible),
+          borderColor: visible ? rgba(clusterColor(p.cluster_id), dense ? 0.4 : 0.52) : 'rgba(0,0,0,0)',
+          borderWidth: visible ? 0.65 : 0,
+          shadowBlur: visible ? (dense ? 4 : 6) : 0,
+          shadowColor: visible ? rgba(clusterColor(p.cluster_id), dense ? 0.22 : 0.3) : 'rgba(0,0,0,0)',
+          opacity: visible ? visibleOpacity : 0.05
         },
         symbolSize: visible ? sized : 1.5
       }
     })
-    const xRange = axisRange(rows.map((r) => Number(r.value?.[0] || 0)))
-    const yRange = axisRange(rows.map((r) => Number(r.value?.[1] || 0)))
+    const plotRows = circularizeRows(rows)
+    const xRange = axisRange(plotRows.map((r) => Number(r.value?.[0] || 0)))
+    const yRange = axisRange(plotRows.map((r) => Number(r.value?.[1] || 0)))
 
     const centerMap = new Map()
-    rows.forEach((row) => {
+    plotRows.forEach((row) => {
       const cid = Number(row?.raw?.cluster_id || 0)
       if (activeClusterId.value != null && cid !== Number(activeClusterId.value)) return
       if (!centerMap.has(cid)) centerMap.set(cid, { sx: 0, sy: 0, n: 0 })
@@ -388,7 +550,8 @@ const renderScatter = () => {
           `城市等级：${d.city_tier || '未知'}`,
           `中位薪资：${formatSalary(f.median_salary)}`,
           `经验/学历：${Number(f.avg_experience_rank || 0).toFixed(2)} / ${Number(f.avg_education_rank || 0).toFixed(2)}`,
-          `同位重叠点：${Number(params?.data?.duplicateCount || 1)}`
+          `同位重叠点：${Number(params?.data?.duplicateCount || 1)}`,
+          `局部密度：${Number(params?.data?.localDensity || 1)}`
         ].join('<br/>')
       }
     },
@@ -436,13 +599,17 @@ const renderScatter = () => {
         progressive: 5000,
         // 关闭 large 模式，确保每个点都能按 cluster_id 正确着色
         large: false,
+        blendMode: 'source-over',
         emphasis: {
+          scale: 1.45,
           itemStyle: {
-            borderColor: '#111827',
-            borderWidth: 1
+            borderColor: '#0f172a',
+            borderWidth: 1.4,
+            shadowBlur: 14,
+            shadowColor: 'rgba(15, 23, 42, 0.28)'
           }
         },
-        data: rows
+        data: plotRows
       },
       {
         type: 'scatter',
@@ -450,9 +617,11 @@ const renderScatter = () => {
         data: centerData,
         symbolSize: 12,
         itemStyle: {
-          color: '#111827',
-          borderColor: '#ffffff',
-          borderWidth: 1.2,
+          color: 'rgba(255,255,255,0.95)',
+          borderColor: '#111827',
+          borderWidth: 1.1,
+          shadowBlur: 10,
+          shadowColor: 'rgba(17, 24, 39, 0.25)',
           opacity: 0.95
         },
         label: {
@@ -491,7 +660,7 @@ const renderScatter = () => {
         ;(part.dataIndex || []).forEach((idx) => idxSet.add(Number(idx)))
       })
       const ids = [...idxSet]
-        .map((idx) => rows[idx]?.pid)
+        .map((idx) => plotRows[idx]?.pid)
         .filter((v) => Number.isFinite(Number(v)))
       scatterSelectedIds.value = Array.from(new Set(ids)).map((x) => Number(x))
       renderParallel()
@@ -712,7 +881,7 @@ watch(() => props.data, async (newData) => {
   renderParallel()
 }, { deep: true, immediate: true })
 
-watch([parallelMode, activeClusterId, coordMode], () => {
+watch([parallelMode, activeClusterId, coordMode, contourMode], () => {
   nextTick(() => {
     renderScatter()
     renderParallel()

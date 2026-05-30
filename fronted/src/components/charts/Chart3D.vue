@@ -12,13 +12,17 @@
     <div v-if="hasData" class="chart-wrapper">
       <div ref="chartContainer" id="3d-chart-container" class="chart-container"></div>
 
-      <div class="gesture-status" v-if="gestureStatus">
+      <div v-if="!isWebGLAvailable" class="fallback-hint">
+        当前浏览器不支持 WebGL，已自动切换为 2D 对比图（点击格子可联动右侧分析）
+      </div>
+
+      <div class="gesture-status" v-if="gestureStatus && isWebGLAvailable">
         <span class="status-icon">{{ statusIcon }}</span>
         {{ gestureStatus }}
       </div>
 
       <div
-        v-if="cursor.visible"
+        v-if="cursor.visible && isWebGLAvailable"
         class="hand-cursor"
         :class="{
           'pinching': cursor.isPinching,
@@ -31,6 +35,7 @@
       </div>
 
       <video
+        v-if="isWebGLAvailable"
         ref="gestureVideo"
         class="gesture-video"
         autoplay
@@ -58,6 +63,7 @@ const emit = defineEmits(['bar-click'])
 // --- DOM & Chart 引用 ---
 const chartContainer = ref(null)
 const hasData = ref(false)
+const isWebGLAvailable = ref(true)
 let chart3D = null
 let resizeHandler = null
 const experiences = ref([])
@@ -108,14 +114,138 @@ watch(() => props.data, (newData) => {
 }, { deep: true })
 
 watch(() => props.gestureEnabled, (enabled) => {
-  enabled ? initGestureControl() : stopGestureControl()
+  if (!enabled || !isWebGLAvailable.value) {
+    stopGestureControl()
+    return
+  }
+  initGestureControl()
 })
+
+const detectWebGLSupport = () => {
+  try {
+    const canvas = document.createElement('canvas')
+    if (!window.WebGLRenderingContext) return false
+    return Boolean(
+      canvas.getContext('webgl2') ||
+      canvas.getContext('webgl') ||
+      canvas.getContext('experimental-webgl')
+    )
+  } catch (err) {
+    return false
+  }
+}
+
+const render2DFallbackChart = (data) => {
+  const data3d = data.data_3d || []
+  const cellMap = new Map()
+  let minSalary = Infinity
+  let maxSalary = -Infinity
+
+  data3d.forEach((item) => {
+    if (!Array.isArray(item) || item.length < 3) return
+    const x = Number(item[0])
+    const y = Number(item[1])
+    const salary = Number(item[2])
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(salary)) return
+    const key = `${x}-${y}`
+    const prev = cellMap.get(key) || { x, y, sumSalary: 0, count: 0 }
+    prev.sumSalary += salary
+    prev.count += 1
+    cellMap.set(key, prev)
+  })
+
+  const heatmapData = Array.from(cellMap.values()).map((cell) => {
+    const avgSalary = cell.count > 0 ? Number((cell.sumSalary / cell.count).toFixed(2)) : 0
+    minSalary = Math.min(minSalary, avgSalary)
+    maxSalary = Math.max(maxSalary, avgSalary)
+    return [cell.x, cell.y, avgSalary, cell.count]
+  })
+
+  if (!Number.isFinite(minSalary) || !Number.isFinite(maxSalary)) {
+    minSalary = 0
+    maxSalary = 1
+  }
+
+  chart3D.setOption({
+    backgroundColor: '#fafafa',
+    tooltip: {
+      trigger: 'item',
+      formatter: (params) => {
+        const [x, y, avgSalary, count] = params.value || []
+        const exp = experiences.value[x] ?? `经验#${x}`
+        const edu = educations.value[y] ?? `学历#${y}`
+        return [
+          `<b>${exp} × ${edu}</b>`,
+          `平均薪资: ${avgSalary}K`,
+          `岗位数: ${count}`
+        ].join('<br/>')
+      }
+    },
+    grid: { left: 80, right: 40, top: 30, bottom: 80 },
+    xAxis: {
+      type: 'category',
+      name: '工作经验',
+      data: experiences.value,
+      axisLabel: { interval: 0, rotate: 25 }
+    },
+    yAxis: {
+      type: 'category',
+      name: '学历',
+      data: educations.value
+    },
+    visualMap: {
+      min: minSalary,
+      max: maxSalary,
+      calculable: true,
+      orient: 'horizontal',
+      left: 'center',
+      bottom: 18,
+      text: ['高薪资', '低薪资'],
+      inRange: {
+        color: ['#dbeafe', '#93c5fd', '#3b82f6', '#1d4ed8']
+      }
+    },
+    series: [{
+      type: 'heatmap',
+      data: heatmapData,
+      progressive: 0,
+      emphasis: {
+        itemStyle: {
+          borderColor: '#111827',
+          borderWidth: 1
+        }
+      }
+    }]
+  })
+
+  chart3D.off('click')
+  chart3D.on('click', (params) => {
+    const [x, y, avgSalary] = params.value || []
+    if (x === undefined || y === undefined) return
+    triggerClick(-1, [x, y, avgSalary])
+  })
+}
 
 const render3DChart = (data) => {
   const container = chartContainer.value || document.getElementById('3d-chart-container')
   if (!container) return
+  if (resizeHandler) {
+    window.removeEventListener('resize', resizeHandler)
+    resizeHandler = null
+  }
   if (chart3D) chart3D.dispose()
   chart3D = echarts.init(container)
+
+  isWebGLAvailable.value = detectWebGLSupport()
+  if (!isWebGLAvailable.value) {
+    stopGestureControl()
+    gestureStatus.value = ''
+    cursor.visible = false
+    render2DFallbackChart(data)
+    resizeHandler = () => chart3D && chart3D.resize()
+    window.addEventListener('resize', resizeHandler)
+    return
+  }
   
   const data3d = data.data_3d || []
   
@@ -654,6 +784,18 @@ onUnmounted(() => {
   background: linear-gradient(135deg, #fafafa 0%, #f0f0f0 100%);
   border-radius: 12px;
   box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+}
+.fallback-hint {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 6;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(255, 251, 235, 0.95);
+  color: #92400e;
+  border: 1px solid #fcd34d;
+  font-size: 13px;
 }
 
 .loading, .result.error { text-align: center; padding: 60px 20px; }
