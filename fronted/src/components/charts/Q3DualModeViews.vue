@@ -28,10 +28,10 @@
       </div>
 
       <div class="toolbar-item">
-        <label>投影模式</label>
+        <label>坐标模式</label>
         <select v-model="coordMode" @change="renderScatter">
+          <option value="pca">聚类投影</option>
           <option value="business">业务坐标</option>
-          <option value="pca">PCA坐标</option>
         </select>
       </div>
 
@@ -62,20 +62,20 @@
     <div v-else class="main-grid">
       <section class="panel">
         <div class="panel-head">
-          <h3>视图一：薪酬模式聚类降维图</h3>
+          <h3>视图一：薪酬模式聚类分布图</h3>
           <span class="meta">{{ coordModeLabel }} · 显示 {{ visiblePointCount }} / {{ points.length }} 点 · scatter</span>
         </div>
 
         <div class="legend-row">
           <span
-            v-for="item in clusterSummary"
+            v-for="item in clusterSummaryDisplay"
             :key="`legend-c${item.cluster_id}`"
             class="legend-item"
-            :class="{ active: activeClusterId === item.cluster_id }"
+            :class="{ active: Number(activeClusterId) === Number(item.cluster_id) }"
             @click="toggleCluster(item.cluster_id)"
           >
             <i class="dot" :style="{ background: clusterColor(item.cluster_id) }"></i>
-            C{{ item.cluster_id }} {{ item.cluster_label }}
+            {{ clusterDisplayText(item.cluster_id) }}
           </span>
         </div>
 
@@ -103,7 +103,7 @@
       <div class="insight-card" v-if="selectedPoint">
         <h4>当前点位</h4>
         <p>
-          {{ selectedPoint.job_title }} · C{{ selectedPoint.cluster_id }}
+          {{ selectedPoint.job_title }} · {{ clusterDisplayText(selectedPoint.cluster_id) }}
           · 中位薪资 {{ formatSalary(selectedPoint.features?.median_salary) }}
           · {{ selectedPoint.company_type }}
         </p>
@@ -132,7 +132,7 @@ const algorithm = ref('gmm')
 const sampleSize = ref(12000)
 const coordMode = ref('pca')
 const contourMode = ref('circle')
-const parallelMode = ref('centroid')
+const parallelMode = ref('sampled')
 
 const activeClusterId = ref(null)
 const selectedPoint = ref(null)
@@ -147,7 +147,7 @@ let scatterObserver = null
 let parallelObserver = null
 
 const points = computed(() => props.data?.points || [])
-const clusterSummary = computed(() => props.data?.cluster_summary || [])
+const rawClusterSummary = computed(() => props.data?.cluster_summary || [])
 const metadata = computed(() => props.data?.metadata || {})
 const parallelPayload = computed(() => props.data?.parallel_payload || {})
 const axisMeta = computed(() => parallelPayload.value?.axis_meta || {})
@@ -163,21 +163,21 @@ const projectionMethodText = computed(() => {
 const coordModeLabel = computed(() => (
   `${
     coordMode.value === 'business'
-      ? '业务坐标(薪资/门槛)'
-      : `${projectionMethodText.value}坐标`
+      ? '聚类输入坐标(薪资指数/门槛指数)'
+      : `${projectionMethodText.value}坐标(仅用于分簇可视化)`
   } · ${
     contourMode.value === 'circle' ? '圆形轮廓' : '原始轮廓'
   }`
 ))
 const axisXName = computed(() => (
   coordMode.value === 'business'
-    ? '中位薪资(K)'
-    : '薪资综合指数（投影）'
+    ? '薪资指数（聚类输入）'
+    : '聚类主轴1（投影）'
 ))
 const axisYName = computed(() => (
   coordMode.value === 'business'
-    ? '门槛指数'
-    : '门槛综合指数（投影）'
+    ? '门槛指数（聚类输入）'
+    : '聚类主轴2（投影）'
 ))
 
 const parallelModeLabel = computed(() => parallelMode.value === 'centroid' ? '方案A：质心聚合' : '方案B：分层抽样')
@@ -189,8 +189,104 @@ const parallelRows = computed(() => {
     : (p.sampled_lines || [])
 })
 
+const getBarrierValue = (p) => {
+  const f = p?.features || {}
+  const expRank = Number(f?.avg_experience_rank || 0)
+  const eduRank = Number(f?.avg_education_rank || 0)
+  if (Number.isFinite(Number(p?.cluster_inputs?.barrier_index))) {
+    return Number(p.cluster_inputs.barrier_index)
+  }
+  return Number((expRank + eduRank).toFixed(4))
+}
+
+const clusterStatsMap = computed(() => {
+  const map = new Map()
+  points.value.forEach((p, i) => {
+    const cid = Number(p?.cluster_id ?? 0)
+    const ci = p?.cluster_inputs || {}
+    const salary = Number.isFinite(Number(ci?.salary_index))
+      ? Number(ci.salary_index)
+      : Number(p?.features?.median_salary || 0)
+    const barrier = Number.isFinite(Number(ci?.barrier_index))
+      ? Number(ci.barrier_index)
+      : getBarrierValue(p)
+    const volatility = Number.isFinite(Number(ci?.volatility_index)) ? Number(ci.volatility_index) : 0
+    const scale = Number.isFinite(Number(ci?.scale_index)) ? Number(ci.scale_index) : 0
+    const entropy = Number.isFinite(Number(ci?.entropy_index)) ? Number(ci.entropy_index) : 0
+    if (!map.has(cid)) {
+      map.set(cid, {
+        cid,
+        n: 0,
+        salarySum: 0,
+        barrierSum: 0,
+        volatilitySum: 0,
+        scaleSum: 0,
+        entropySum: 0
+      })
+    }
+    const acc = map.get(cid)
+    acc.n += 1
+    acc.salarySum += salary
+    acc.barrierSum += barrier
+    acc.volatilitySum += volatility
+    acc.scaleSum += scale
+    acc.entropySum += entropy
+  })
+  map.forEach((v, cid) => {
+    const n = Math.max(1, Number(v.n || 0))
+    map.set(cid, {
+      cid,
+      n,
+      salaryMean: v.salarySum / n,
+      barrierMean: v.barrierSum / n,
+      volatilityMean: v.volatilitySum / n,
+      scaleMean: v.scaleSum / n,
+      entropyMean: v.entropySum / n
+    })
+  })
+  return map
+})
+
+const clusterSemantics = computed(() => {
+  const fixed = new Map([
+    [0, { label: '高薪高门槛型' }],
+    [1, { label: '低薪低门槛型' }],
+    [2, { label: '高薪波动型' }],
+    [3, { label: '热门普及型' }],
+    [4, { label: '大众稳定型' }]
+  ])
+  // 兜底：如果簇ID超出0-4，仍给一个默认标签
+  const ids = new Set([
+    ...rawClusterSummary.value.map((x) => Number(x?.cluster_id ?? 0)),
+    ...points.value.map((x) => Number(x?.cluster_id ?? 0))
+  ])
+  ids.forEach((cid) => {
+    if (!fixed.has(cid)) fixed.set(cid, { label: `扩展簇${cid}` })
+  })
+  return fixed
+})
+
+const clusterSummaryDisplay = computed(() =>
+  (rawClusterSummary.value || [])
+    .map((item) => ({
+      ...item,
+      cluster_id: Number(item?.cluster_id ?? 0),
+      cluster_label: clusterSemantics.value.get(Number(item?.cluster_id ?? 0))?.label || `簇${Number(item?.cluster_id ?? 0)}`
+    }))
+    .sort((a, b) => Number(a.cluster_id) - Number(b.cluster_id))
+)
+
+const clusterDisplayText = (cid) => {
+  const c = Number(cid || 0)
+  const sem = clusterSemantics.value.get(c)
+  return sem?.label ? `C${c} ${sem.label}` : `C${c}`
+}
+
 const clusterPalette = ['#2d7cff', '#ef4444', '#00b894', '#f59e0b', '#7b61ff', '#14b8a6', '#f97316', '#ec4899']
-const clusterColor = (cid) => clusterPalette[Math.abs(Number(cid) || 0) % clusterPalette.length]
+const clusterColor = (cid) => {
+  const c = Number(cid || 0)
+  return clusterPalette[Math.abs(c) % clusterPalette.length]
+}
 const hexToRgb = (hex) => {
   const h = String(hex || '').replace('#', '')
   if (h.length !== 6) return [45, 124, 255]
@@ -300,9 +396,16 @@ const visiblePointCount = computed(() => {
 
 const baseCoordOfPoint = (p) => {
   if (coordMode.value === 'business') {
+    const ci = p?.cluster_inputs || {}
+    const salaryIndex = Number.isFinite(Number(ci?.salary_index))
+      ? Number(ci.salary_index)
+      : Number(p?.features?.median_salary || 0)
+    const barrier = Number.isFinite(Number(ci?.barrier_index))
+      ? Number(ci.barrier_index)
+      : getBarrierValue(p)
     return [
-      Number(p?.features?.median_salary || 0),
-      Number(p?.cluster_inputs?.barrier_index || 0)
+      salaryIndex,
+      barrier
     ]
   }
   return [Number(p?.umap_x || 0), Number(p?.umap_y || 0)]
@@ -317,6 +420,38 @@ const axisRange = (values, padRatio = 0.08) => {
   return { min: minVal - pad, max: maxVal + pad }
 }
 
+const quantile = (arr, q) => {
+  if (!Array.isArray(arr) || !arr.length) return 0
+  const sorted = [...arr].sort((a, b) => a - b)
+  const pos = (sorted.length - 1) * Math.min(1, Math.max(0, q))
+  const lo = Math.floor(pos)
+  const hi = Math.ceil(pos)
+  if (lo === hi) return sorted[lo]
+  const w = pos - lo
+  return sorted[lo] * (1 - w) + sorted[hi] * w
+}
+
+const displayAxisRange = (values) => {
+  if (!values.length) return { min: 0, max: 1 }
+  // 业务圆形模式用稳健分位数范围，避免少量离群点制造大空白
+  if (coordMode.value === 'business' && contourMode.value === 'circle') {
+    const q1 = quantile(values, 0.01)
+    const q99 = quantile(values, 0.99)
+    const span = Math.max(1e-6, q99 - q1)
+    const pad = Math.max(0.12, span * 0.08)
+    return { min: q1 - pad, max: q99 + pad }
+  }
+  // 业务原始模式也做轻度稳健缩轴，缓解“点挤在一起”
+  if (coordMode.value === 'business' && contourMode.value === 'original') {
+    const q1 = quantile(values, 0.005)
+    const q99 = quantile(values, 0.995)
+    const span = Math.max(1e-6, q99 - q1)
+    const pad = Math.max(0.1, span * 0.07)
+    return { min: q1 - pad, max: q99 + pad }
+  }
+  return axisRange(values)
+}
+
 const circularizeRows = (rows) => {
   if (!Array.isArray(rows) || rows.length < 3 || contourMode.value !== 'circle') return rows
 
@@ -328,33 +463,99 @@ const circularizeRows = (rows) => {
   const stdX = Math.sqrt(xs.reduce((a, b) => a + (b - meanX) ** 2, 0) / Math.max(1, xs.length - 1)) || 1
   const stdY = Math.sqrt(ys.reduce((a, b) => a + (b - meanY) ** 2, 0) / Math.max(1, ys.length - 1)) || 1
 
-  const polar = vals.map(([x, y], i) => {
-    const nx = (x - meanX) / stdX
-    const ny = (y - meanY) / stdY
-    const r = Math.sqrt(nx * nx + ny * ny)
-    const theta = Math.atan2(ny, nx)
-    return { i, r, theta }
-  })
+  // PCA 模式：保持原有的全局圆形投影
+  if (coordMode.value === 'pca') {
+    const polar = vals.map(([x, y], i) => {
+      const nx = (x - meanX) / stdX
+      const ny = (y - meanY) / stdY
+      const r = Math.sqrt(nx * nx + ny * ny)
+      const theta = Math.atan2(ny, nx)
+      return { i, r, theta }
+    })
 
-  const sorted = [...polar].sort((a, b) => a.r - b.r)
-  const rankMap = new Map()
-  sorted.forEach((p, idx) => rankMap.set(p.i, idx))
-  const maxR = Math.max(...polar.map((p) => p.r), 1e-6)
-  const targetMax = 3.0
-  const blend = 0.64
+    const sorted = [...polar].sort((a, b) => a.r - b.r)
+    const rankMap = new Map()
+    sorted.forEach((p, idx) => rankMap.set(p.i, idx))
+    const maxR = Math.max(...polar.map((p) => p.r), 1e-6)
+    const targetMax = 3.0
+    const blend = 0.64
 
-  return rows.map((row, idx) => {
-    const p = polar[idx]
-    const rank = Number(rankMap.get(idx) || 0)
-    const q = (rank + 0.5) / rows.length
-    const rDisc = Math.sqrt(q) * targetMax
-    const rOrig = (p.r / maxR) * targetMax
-    const rNew = rOrig * (1 - blend) + rDisc * blend
-    const xNew = rNew * Math.cos(p.theta)
-    const yNew = rNew * Math.sin(p.theta)
+    return rows.map((row, idx) => {
+      const p = polar[idx]
+      const rank = Number(rankMap.get(idx) || 0)
+      const q = (rank + 0.5) / rows.length
+      const rDisc = Math.sqrt(q) * targetMax
+      const rOrig = (p.r / maxR) * targetMax
+      const rNew = rOrig * (1 - blend) + rDisc * blend
+      const xNew = rNew * Math.cos(p.theta)
+      const yNew = rNew * Math.sin(p.theta)
+      return {
+        ...row,
+        value: [xNew, yNew]
+      }
+    })
+  }
+
+  // 业务坐标：保留簇结构，同时做“更圆 + 更分散”的展示变换
+  const normRows = rows.map((row) => {
+    const x = Number(row.value?.[0] || 0)
+    const y = Number(row.value?.[1] || 0)
     return {
       ...row,
-      value: [xNew, yNew]
+      _nx: (x - meanX) / stdX,
+      _ny: (y - meanY) / stdY
+    }
+  })
+
+  const clusterMap = new Map()
+  normRows.forEach((r) => {
+    const cid = Number(r?.raw?.cluster_id || 0)
+    if (!clusterMap.has(cid)) clusterMap.set(cid, [])
+    clusterMap.get(cid).push(r)
+  })
+
+  const centers = []
+  clusterMap.forEach((arr, cid) => {
+    const cx = arr.reduce((s, r) => s + r._nx, 0) / arr.length
+    const cy = arr.reduce((s, r) => s + r._ny, 0) / arr.length
+    centers.push({ cid, cx, cy, n: arr.length, theta: Math.atan2(cy, cx), r: Math.hypot(cx, cy) })
+  })
+  const sortedCenter = [...centers].sort((a, b) => a.theta - b.theta)
+  const k = Math.max(1, sortedCenter.length)
+  const meanCenterR = sortedCenter.reduce((s, c) => s + c.r, 0) / k
+  const targetRingR = Math.max(2.6, meanCenterR * 1.48)
+
+  const targetCenterByCid = new Map()
+  sortedCenter.forEach((c, idx) => {
+    const a = (idx / k) * Math.PI * 2
+    const tx = Math.cos(a) * targetRingR
+    const ty = Math.sin(a) * targetRingR
+    // 保留原簇相对关系，且让整体更接近圆
+    targetCenterByCid.set(c.cid, {
+      x: c.cx * 0.2 + tx * 0.8,
+      y: c.cy * 0.2 + ty * 0.8
+    })
+  })
+
+  const localStatsByCid = new Map()
+  centers.forEach((c) => {
+    const arr = clusterMap.get(c.cid) || []
+    const sx = Math.sqrt(arr.reduce((s, r) => s + (r._nx - c.cx) ** 2, 0) / Math.max(1, arr.length - 1)) || 1
+    const sy = Math.sqrt(arr.reduce((s, r) => s + (r._ny - c.cy) ** 2, 0) / Math.max(1, arr.length - 1)) || 1
+    localStatsByCid.set(c.cid, { cx: c.cx, cy: c.cy, sx, sy })
+  })
+
+  return normRows.map((r) => {
+    const cid = Number(r?.raw?.cluster_id || 0)
+    const st = localStatsByCid.get(cid) || { cx: 0, cy: 0, sx: 1, sy: 1 }
+    const tc = targetCenterByCid.get(cid) || { x: st.cx, y: st.cy }
+    const iso = (st.sx + st.sy) / 2
+    const ox = ((r._nx - st.cx) / st.sx) * iso
+    const oy = ((r._ny - st.cy) / st.sy) * iso
+    const spread = 0.94 + Math.min(0.12, Number(r.densityNorm || 0) * 0.16)
+    return {
+      ...r,
+      value: [tc.x + ox * spread, tc.y + oy * spread]
     }
   })
 }
@@ -380,8 +581,8 @@ const buildDuplicateAwareJitter = () => {
 
   const spanX = Math.max(1e-6, maxX - minX)
   const spanY = Math.max(1e-6, maxY - minY)
-  const gridX = coordMode.value === 'pca' ? 56 : 72
-  const gridY = coordMode.value === 'pca' ? 44 : 52
+  const gridX = coordMode.value === 'pca' ? 56 : 96
+  const gridY = coordMode.value === 'pca' ? 44 : 84
   const cellX = spanX / gridX
   const cellY = spanY / gridY
   const densityCellMap = new Map()
@@ -426,14 +627,14 @@ const buildDuplicateAwareJitter = () => {
     const sorted = [...pidList].sort((a, b) => a - b)
     const spreadDup = coordMode.value === 'pca'
       ? Math.min(1.3, 1 + 0.08 * Math.log2(n + 1))
-      : Math.min(2.1, 1 + 0.18 * Math.log2(n + 1))
+      : Math.min(2.9, 1 + 0.24 * Math.log2(n + 1))
 
     sorted.forEach((pid, idx) => {
       dupCountByPid.set(pid, n)
       const density = Number(densityRawByPid.get(pid) || 1)
       const densityNorm = (density - 1) / Math.max(1, maxDensity - 1)
       densityNormByPid.set(pid, densityNorm)
-      const spreadDensity = 1 + densityNorm * (coordMode.value === 'pca' ? 0.45 : 0.28)
+      const spreadDensity = 1 + densityNorm * (coordMode.value === 'pca' ? 0.45 : 0.58)
       const spread = spreadDup * spreadDensity
       if (n <= 1) {
         if (density <= 2) {
@@ -442,9 +643,9 @@ const buildDuplicateAwareJitter = () => {
         }
         // 非重复点但处在密集网格时，给一个轻微抖动，降低完全重叠
         const a = (Number(pid) + 1) * golden
-        const r0 = coordMode.value === 'pca' ? 0.008 : 0.018
+        const r0 = coordMode.value === 'pca' ? 0.008 : 0.038
         const r = r0 * (1 + densityNorm * 1.7)
-        const ratioY = coordMode.value === 'pca' ? 0.9 : 0.35
+        const ratioY = coordMode.value === 'pca' ? 0.9 : 0.58
         const dx = Math.cos(a) * r
         const dy = Math.sin(a) * r * ratioY
         jitterByPid.set(pid, [dx, dy])
@@ -453,8 +654,8 @@ const buildDuplicateAwareJitter = () => {
       // Sunflower 排布：重复越多，半径越大，但整体仍围绕原坐标
       const r = Math.sqrt(idx + 0.5)
       const a = idx * golden
-      const base = coordMode.value === 'pca' ? 0.012 : 0.075
-      const ratioY = coordMode.value === 'pca' ? 0.92 : 0.3
+      const base = coordMode.value === 'pca' ? 0.012 : 0.125
+      const ratioY = coordMode.value === 'pca' ? 0.92 : 0.62
       const dx = Math.cos(a) * r * base * spread
       const dy = Math.sin(a) * r * base * ratioY * spread
       jitterByPid.set(pid, [dx, dy])
@@ -486,12 +687,12 @@ const renderScatter = () => {
       const norm = (rec - minLogCount) / logSpan
       const localDensity = Number(densityRawByPid.get(pid) || 1)
       const densityNorm = Number(densityNormByPid.get(pid) || 0)
-      const sizeFromDemand = 2.1 + norm * 4.1
-      const sizeDensityFactor = dense ? (1 - densityNorm * 0.42) : (1 - densityNorm * 0.25)
-      const sized = Math.max(1.8, sizeFromDemand * sizeDensityFactor)
-      const baseOpacity = dense ? 0.84 : 0.92
-      const densePenalty = densityNorm * (dense ? 0.5 : 0.32)
-      const visibleOpacity = Math.max(dense ? 0.2 : 0.35, baseOpacity - densePenalty)
+      const sizeFromDemand = 1.35 + norm * 2.45
+      const sizeDensityFactor = dense ? (1 - densityNorm * 0.54) : (1 - densityNorm * 0.33)
+      const sized = Math.max(1.1, sizeFromDemand * sizeDensityFactor)
+      const baseOpacity = dense ? 0.58 : 0.74
+      const densePenalty = densityNorm * (dense ? 0.38 : 0.24)
+      const visibleOpacity = Math.max(dense ? 0.08 : 0.18, baseOpacity - densePenalty)
       return {
         value: [Number(bx || 0) + jx, Number(by || 0) + jy],
         baseValue: [Number(bx || 0), Number(by || 0)],
@@ -504,8 +705,8 @@ const renderScatter = () => {
         itemStyle: {
           color: pointGradientColor(clusterColor(p.cluster_id), visible),
           borderColor: visible ? rgba(clusterColor(p.cluster_id), dense ? 0.4 : 0.52) : 'rgba(0,0,0,0)',
-          borderWidth: visible ? 0.65 : 0,
-          shadowBlur: visible ? (dense ? 4 : 6) : 0,
+          borderWidth: visible ? 0.28 : 0,
+          shadowBlur: visible ? (dense ? 1 : 2) : 0,
           shadowColor: visible ? rgba(clusterColor(p.cluster_id), dense ? 0.22 : 0.3) : 'rgba(0,0,0,0)',
           opacity: visible ? visibleOpacity : 0.05
         },
@@ -513,8 +714,8 @@ const renderScatter = () => {
       }
     })
     const plotRows = circularizeRows(rows)
-    const xRange = axisRange(plotRows.map((r) => Number(r.value?.[0] || 0)))
-    const yRange = axisRange(plotRows.map((r) => Number(r.value?.[1] || 0)))
+    const xRange = displayAxisRange(plotRows.map((r) => Number(r.value?.[0] || 0)))
+    const yRange = displayAxisRange(plotRows.map((r) => Number(r.value?.[1] || 0)))
 
     const centerMap = new Map()
     plotRows.forEach((row) => {
@@ -545,7 +746,7 @@ const renderScatter = () => {
         const f = d.features || {}
         return [
           `<b>${d.job_title}</b>`,
-          `簇：C${d.cluster_id} ${d.cluster_label || ''}`,
+          `簇：${clusterDisplayText(d.cluster_id)}`,
           `行业：${d.company_type || '未知'}`,
           `城市等级：${d.city_tier || '未知'}`,
           `中位薪资：${formatSalary(f.median_salary)}`,
@@ -627,14 +828,14 @@ const renderScatter = () => {
         label: {
           show: true,
           position: 'top',
-          formatter: (p) => `C${Number(p?.data?.cid || 0)}`,
+          formatter: (p) => clusterDisplayText(Number(p?.data?.cid || 0)),
           color: '#0f172a',
           fontSize: 11,
           fontWeight: 700
         },
         z: 8,
         tooltip: {
-          formatter: (p) => `簇中心：C${Number(p?.data?.cid || 0)}`
+          formatter: (p) => `簇中心：${clusterDisplayText(Number(p?.data?.cid || 0))}`
         }
       }
     ]
@@ -745,7 +946,7 @@ const renderParallel = () => {
         const d = params?.data?.raw
         if (!d) return ''
         return [
-          `簇：C${d.cluster_id}`,
+          `簇：${clusterDisplayText(d.cluster_id)}`,
           `学历：${d.education_label}`,
           `经验：${d.experience_label}`,
           `城市：${d.city_label}`,
@@ -867,7 +1068,7 @@ watch(() => props.data, async (newData) => {
   nClusters.value = Number(m.n_clusters || nClusters.value || 5)
   algorithm.value = String(m.cluster_algorithm || algorithm.value || 'gmm')
   sampleSize.value = Number(m.sample_size || sampleSize.value || 12000)
-  parallelMode.value = String(newData?.parallel_payload?.default_mode || 'centroid')
+  parallelMode.value = 'sampled'
 
   scatterSelectedIds.value = []
   parallelFilteredPointIds.value = []
