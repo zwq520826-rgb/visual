@@ -10,6 +10,7 @@ from datetime import datetime
 
 from services.industry_service import IndustryService
 from services.trend_service import TrendService
+from services.q5_force_graph_service import Q5ForceGraphService
 from utils.response import ResponseBuilder
 from utils.validators import RequestValidator
 from database.Q3 import DatabaseManager
@@ -23,6 +24,7 @@ industry_bp = Blueprint('industry', __name__, url_prefix='/api')
 db_manager = DatabaseManager('default')
 industry_service = IndustryService(db_manager)
 trend_service = TrendService(db_manager=db_manager)
+q5_force_service = Q5ForceGraphService(db_manager=db_manager)
 
 
 @industry_bp.route('/charts/industry', methods=['GET'])
@@ -270,8 +272,10 @@ def get_industry_salary_analysis():
 def get_job_ranking():
     """获取职位综合排名柱状图数据"""
     try:
-        # 获取职位排名数据（默认返回前5名）
-        job_rankings = trend_service.get_job_ranking(top_n=5)
+        # 获取职位排名数据（可配置返回条数）
+        top_n = request.args.get("top_n", default=5, type=int)
+        top_n = max(5, min(top_n, 300))
+        job_rankings = trend_service.get_job_ranking(top_n=top_n)
         
         # 转换为字典格式
         jobs_data = [
@@ -285,7 +289,7 @@ def get_job_ranking():
             for job in job_rankings
         ]
         
-        return ResponseBuilder.success("获取职位综合排名数据成功", {"jobs": jobs_data})
+        return ResponseBuilder.success("获取职位综合排名数据成功", {"jobs": jobs_data, "top_n": len(jobs_data)})
         
     except FileNotFoundError as e:
         logger.error(f"文件未找到: {e}")
@@ -332,4 +336,77 @@ def get_industry_trend_rose():
         return ResponseBuilder.not_found(f"数据文件不存在: {str(e)}")
     except Exception as e:
         logger.error(f"获取行业趋势玫瑰图数据失败: {e}")
+        return ResponseBuilder.internal_error("服务器内部错误", {"type": "INTERNAL_ERROR", "details": str(e)})
+
+
+@industry_bp.route('/q5/force/emerging-jobs', methods=['GET'])
+def get_q5_force_emerging_jobs():
+    """获取 Q5 引力图顶部卡片用的前 N 新兴岗位。"""
+    try:
+        top_n = request.args.get("top_n", default=5, type=int)
+        top_n = max(1, min(top_n, 20))
+        jobs = q5_force_service.get_emerging_jobs(top_n=top_n)
+        return ResponseBuilder.success("获取 Q5 新兴岗位成功", {"jobs": jobs, "top_n": len(jobs)})
+    except Exception as e:
+        logger.error(f"获取 Q5 新兴岗位失败: {e}", exc_info=True)
+        return ResponseBuilder.internal_error("服务器内部错误", {"type": "INTERNAL_ERROR", "details": str(e)})
+
+
+@industry_bp.route('/q5/force/job-network', methods=['GET'])
+def get_q5_force_job_network():
+    """获取指定岗位的行业引力网络数据。"""
+    try:
+        job_title = request.args.get("job_title", default="", type=str).strip()
+        if not job_title:
+            return ResponseBuilder.bad_request("缺少参数: job_title")
+
+        top_k_industry = request.args.get("top_k_industry", default=12, type=int)
+        top_k_industry = max(3, min(top_k_industry, 30))
+        tier = request.args.get("tier", default="all", type=str)
+
+        network = q5_force_service.get_job_industry_force(
+            job_title=job_title,
+            top_k_industry=top_k_industry,
+            city_tier=tier,
+        )
+        return ResponseBuilder.success("获取 Q5 引力网络成功", network)
+    except ValueError as e:
+        return ResponseBuilder.bad_request(str(e))
+    except Exception as e:
+        logger.error(f"获取 Q5 引力网络失败: {e}", exc_info=True)
+        return ResponseBuilder.internal_error("服务器内部错误", {"type": "INTERNAL_ERROR", "details": str(e)})
+
+
+@industry_bp.route('/q5/force/hub-ranking', methods=['GET'])
+def get_q5_force_hub_ranking():
+    """获取 Q5 枢纽岗位排名。"""
+    try:
+        top_n = request.args.get("top_n", default=30, type=int)
+        top_n = max(1, min(top_n, 50))
+        top_k_industry = request.args.get("top_k_industry", default=12, type=int)
+        top_k_industry = max(3, min(top_k_industry, 30))
+
+        ranking = q5_force_service.get_job_hub_ranking(
+            top_n=top_n,
+            top_k_industry=top_k_industry,
+        )
+        return ResponseBuilder.success("获取 Q5 枢纽排名成功", {"ranking": ranking, "top_n": len(ranking)})
+    except Exception as e:
+        logger.error(f"获取 Q5 枢纽排名失败: {e}", exc_info=True)
+        return ResponseBuilder.internal_error("服务器内部错误", {"type": "INTERNAL_ERROR", "details": str(e)})
+
+
+@industry_bp.route('/q5/force/contrast-jobs', methods=['GET'])
+def get_q5_force_contrast_jobs():
+    """获取用于对比的新兴外岗位列表。"""
+    try:
+        top_n = request.args.get("top_n", default=6, type=int)
+        top_n = max(2, min(top_n, 8))
+        emerging_top_n = request.args.get("emerging_top_n", default=5, type=int)
+        emerging_top_n = max(1, min(emerging_top_n, 20))
+
+        jobs = q5_force_service.get_contrast_jobs(top_n=top_n, emerging_top_n=emerging_top_n)
+        return ResponseBuilder.success("获取 Q5 对比岗位成功", {"jobs": jobs, "top_n": len(jobs)})
+    except Exception as e:
+        logger.error(f"获取 Q5 对比岗位失败: {e}", exc_info=True)
         return ResponseBuilder.internal_error("服务器内部错误", {"type": "INTERNAL_ERROR", "details": str(e)})

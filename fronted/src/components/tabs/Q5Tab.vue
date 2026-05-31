@@ -2,70 +2,13 @@
   <section class="q5-tab">
     <header class="q5-hero">
       <div>
-        <h2>Q5 新兴职业扩散与行业引力网络</h2>
-        <p>融合多维岗位排行、行业玫瑰与星云网络，追踪职业破壁路径与核心枢纽。</p>
+        <h2>Q5 行业引力网络</h2>
+        <p>仅保留引力图视图：展示新兴岗位与行业节点的关联结构。</p>
       </div>
-      <div class="hero-page-chip">当前页面：第 {{ currentPage }} / 2 页</div>
     </header>
 
     <div class="q5-workspace">
-    <!-- 第 1 页：两个图表并排显示 -->
-    <div v-if="currentPage === 1" class="page-block">
-      <div class="charts-container">
-        <!-- 视图1：Math-Based 多维 Icon 柱状图 -->
-        <div class="chart-section chart-left">
-          <h3>Math-Based 多维 Icon 柱状图</h3>
-          
-          <div class="api-section">
-            <div v-if="error" class="error-message">
-              <p>加载失败: {{ error }}</p>
-            </div>
-            
-            <MultiIconBarChart 
-              v-if="chartData?.data?.jobs"
-              :data="chartData.data.jobs"
-              :loading="loading"
-              :error="error"
-            />
-            
-            <div v-if="loading" class="empty-state">
-              <p>正在加载数据...</p>
-            </div>
-            
-            <div v-if="!chartData && !loading && !error" class="empty-state">
-              <p>暂无数据</p>
-            </div>
-          </div>
-        </div>
-
-        <!-- 视图2：连续型进度条图 -->
-        <div class="chart-section chart-right">
-          <h3>Math-Based 多维进度条图（连续型）</h3>
-          
-          <div class="api-section">
-            <div v-if="error" class="error-message">
-              <p>加载失败: {{ error }}</p>
-            </div>
-            
-            <ContinuousProgressBarChart 
-              v-if="chartData?.data?.jobs"
-              :data="chartData.data.jobs"
-              :loading="loading"
-              :error="error"
-            />
-            
-            <div v-if="loading" class="empty-state">
-              <p>正在加载数据...</p>
-            </div>
-            
-            <div v-if="!chartData && !loading && !error" class="empty-state">
-              <p>暂无数据</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="chart-section chart-full force-inline-first-page">
+      <div class="chart-section chart-full">
         <h3>引力网络图：行业破壁与核心枢纽</h3>
 
         <div v-if="forceJobsError" class="error-message">
@@ -73,6 +16,12 @@
         </div>
         <div v-if="forceAtlasError" class="error-message">
           <p>网络图加载失败: {{ forceAtlasError }}</p>
+        </div>
+        <div v-if="rankingError" class="error-message">
+          <p>对比岗位来源加载失败: {{ rankingError }}</p>
+        </div>
+        <div v-if="contrastSourceError" class="error-message">
+          <p>对比岗位兜底来源加载失败: {{ contrastSourceError }}</p>
         </div>
 
         <div class="force-top-console">
@@ -115,6 +64,32 @@
           <label>行业节点上限：</label>
           <input v-model.number="forceTopKIndustry" type="range" min="10" max="15" step="1" />
           <span>{{ forceTopKIndustry }}</span>
+
+          <label class="switch-inline">
+            <input v-model="hideOtherForceGraphs" type="checkbox" />
+            <span>显示其他引力图：{{ hideOtherForceGraphs ? '关闭' : '开启' }}</span>
+          </label>
+          <span class="mode-hint">
+            {{ hideOtherForceGraphs ? '对比模式：仅显示当前新兴岗位 + 对比岗位' : '全景模式：显示全部新兴岗位引力图' }}
+          </span>
+        </div>
+
+        <div v-if="hideOtherForceGraphs" class="contrast-panel">
+          <h4>对比岗位（非新兴）</h4>
+          <div class="contrast-list">
+            <button
+              v-for="job in contrastJobs"
+              :key="`contrast-${job.job_title}`"
+              class="contrast-chip"
+              :class="{ active: job.job_title === selectedContrastJobTitle }"
+              @click="selectContrastJob(job.job_title)"
+            >
+              <span class="title">{{ job.job_title }}</span>
+              <span class="meta">{{ formatNum(job.records_count) }} 岗</span>
+              <span class="tag">{{ job.contrast_tag || '对比岗位' }}</span>
+            </button>
+          </div>
+          <div v-if="rankingLoading || contrastSourceLoading" class="force-card-loading">正在加载对比岗位...</div>
         </div>
 
         <div class="force-summary-panel" v-if="activeForceNetwork?.summary">
@@ -127,10 +102,10 @@
         </div>
 
         <div class="force-map-wrapper">
-          <div v-if="forceAtlasLoading" class="force-map-loading">正在加载 5 个引力图...</div>
+          <div v-if="forceAtlasLoading" class="force-map-loading">正在加载引力图...</div>
           <Q5ForceAtlasGraph
             v-else
-            :networks="forceAtlasNetworks"
+            :networks="displayedForceNetworks"
             :activeJobTitle="activeForceJobTitle"
             :loading="false"
             :error="forceAtlasError"
@@ -138,251 +113,118 @@
         </div>
       </div>
     </div>
-
-    <!-- 第 2 页：行业双环嵌套玫瑰极坐标图（ECharts） -->
-    <div v-else-if="currentPage === 2" class="page-block">
-      <div class="chart-section chart-full">
-        <h3>行业双环嵌套玫瑰极坐标图</h3>
-
-        <div class="api-section">
-          <!--<button class="btn" @click="handleLoadIndustryRose" :disabled="roseLoading">
-            {{ roseLoading ? '加载中...' : '加载行业玫瑰图数据' }}
-          </button>-->
-
-          <div v-if="roseError" class="error-message">
-            <p>加载失败: {{ roseError }}</p>
-          </div>
-
-            <div v-if="roseData && roseData.data && roseData.data.industries" class="nebula-vertical">
-             <!-- 上：玫瑰图 + 左侧 Top2 卡片 -->
-              <div class="rose-section">
-                <div class="top-cards-sidebar">
-                  <!-- 调试信息 -->
-                  <!--<div style="font-size:10px;color:#666;padding:4px;margin-bottom:8px;background:#f0f8ff;border-radius:3px;max-width:200px;word-break:break-all;">
-                    调试: roseData={{ !!roseData }}, data={{ !!roseData?.data }}, industries={{ roseData?.data?.industries?.length || 'N/A' }}, topTwo={{ topTwo?.length }}, loading={{ roseLoading }}
-                  </div>-->
-                  <!-- 显示Top2卡片，如果没有数据则显示占位符 -->
-                  <div v-if="topTwo && topTwo.length > 0" v-for="(it, idx) in topTwo" :key="idx" class="top-card-small">
-                    <div class="top-card-title">{{ it.industry_name || it.company_type || '行业' }}</div>
-                    <div class="top-card-row">招聘总数: <b>{{ formatNum(it.national_job_count || it.count || it.records) }}</b></div>
-                    <div class="top-card-row">平均薪资: <b>{{ formatNum(it.avg_median_salary || it.median_salary || it.salary) }}</b></div>
-                    <div class="top-card-row">经验: <b>{{ formatFloat(it.avg_experience_rank) }}</b></div>
-                  </div>
-                  <!-- 数据加载中或无数据的占位符 -->
-                  <div v-else class="top-card-small placeholder">
-                    <div class="top-card-title">{{ roseLoading ? '数据加载中...' : '暂无数据' }}</div>
-                    <div class="top-card-row">招聘总数: <b>--</b></div>
-                    <div class="top-card-row">平均薪资: <b>--</b></div>
-                    <div class="top-card-row">经验: <b>--</b></div>
-                  </div>
-                </div>
-                <div class="rose-wrapper">
-          <RoseNestedPolar
-                  class="rose-chart"
-                  ref="roseRef"
-            :data="roseData.data.industries"
-                  :selectedIndustry="selectedIndustry"
-                  :highlightedJob="selectedJob"
-            title="行业双环嵌套玫瑰图"
-                  @sectorClick="onSectorClick"
-                  @sectorHover="onSectorHover"
-                  @sectorOut="onSectorOut"
-                  @hoverStart="onRoseHoverStart"
-                  @hoverEnd="onRoseHoverEnd"
-                />
-                </div>
-              </div>
-
-            <!-- 下：星云 + 侧栏，星云铺满可用空间 -->
-            <div class="nebula-row">
-              <div class="nebula-chart-wrapper" :class="{ 'nebula-disabled': roseHover, 'nebula-zoomed': nebulaZoom }">
-                <IndustryNebula
-                  :industries="roseData.data.industries"
-                  :filterIndustry="selectedIndustry"
-                  :interactive="!roseHover"
-                  :fogEnabled="nebulaControls.fogEnabled"
-                  :heatIntensity="nebulaControls.heatIntensity"
-                  :footprintDecay="nebulaControls.footprintDecay"
-                  :terrainMode="nebulaControls.terrainMode"
-                  :terrainSmooth="nebulaControls.terrainSmooth"
-                  @industryEnter="onIndustryEnter"
-                  @selectJob="onSelectJob"
-                  @hoverIndustry="onNebulaHover"
-                  class="nebula-chart"
-                />
-              </div>
-
-              <div class="info-panel">
-                <div class="nebula-controls" style="margin-bottom:12px;">
-                  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-                    <label style="font-size:13px;color:#234">迷雾 (Fog)</label>
-                    <input type="checkbox" v-model="nebulaControls.fogEnabled" />
-                  </div>
-                  <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
-                    <label style="font-size:13px;color:#234;flex:1">热力强度</label>
-                    <input type="range" min="0.2" max="3" step="0.1" v-model.number="nebulaControls.heatIntensity" />
-                    <div style="width:40px;text-align:right">{{ nebulaControls.heatIntensity.toFixed(1) }}</div>
-                  </div>
-                  <div style="display:flex;align-items:center;gap:8px;">
-                    <label style="font-size:13px;color:#234;flex:1">足迹衰减</label>
-                    <input type="range" min="0.0" max="0.2" step="0.01" v-model.number="nebulaControls.footprintDecay" />
-                    <div style="width:40px;text-align:right">{{ nebulaControls.footprintDecay.toFixed(2) }}</div>
-                  </div>
-                  <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px;">
-                    <label style="font-size:13px;color:#234">地形热力模式</label>
-                    <input type="checkbox" v-model="nebulaControls.terrainMode" />
-                  </div>
-                  <div style="display:flex;align-items:center;gap:8px;margin-top:6px;">
-                    <label style="font-size:13px;color:#234;flex:1">平滑强度</label>
-                    <input type="range" min="0" max="1" step="0.05" v-model.number="nebulaControls.terrainSmooth" />
-                    <div style="width:40px;text-align:right">{{ nebulaControls.terrainSmooth.toFixed(2) }}</div>
-                  </div>
-                  <div style="margin-top:12px;">
-                    <div style="font-size:13px;color:#234;margin-bottom:6px;">颜色 → 平均薪资（低 → 高）</div>
-                    <div :style="{ height: '10px', borderRadius: '6px', background: 'linear-gradient(to right,' + salaryColorStops(12) + ')' }"></div>
-                    <div style="display:flex;justify-content:space-between;font-size:12px;margin-top:6px;color:#567;">
-                      <div>{{ formatNum(salaryExtent[0]) }}</div>
-                      <div>{{ formatNum(salaryExtent[1]) }}</div>
-                    </div>
-                    <!--<div style="margin-top:8px;font-size:13px;color:#234;">面积 → 招聘总数（小 → 大）</div>
-                    <div style="display:flex;align-items:center;gap:12px;margin-top:6px;">
-                      <div style="display:flex;flex-direction:column;align-items:center;">
-                        <div :style="{ width: mapCountToPx(countExtent[0]) + 'px', height: mapCountToPx(countExtent[0]) + 'px', borderRadius: '50%', background: '#eee' }"></div>
-                        <div style="font-size:11px;color:#777;margin-top:4px;">{{ countExtent[0] }}</div>
-                      </div>
-                      <div style="display:flex;flex-direction:column;align-items:center;">
-                        <div :style="{ width: mapCountToPx(countExtent[1]) + 'px', height: mapCountToPx(countExtent[1]) + 'px', borderRadius: '50%', background: '#eee' }"></div>
-                        <div style="font-size:11px;color:#777;margin-top:4px;">{{ countExtent[1] }}</div>
-                      </div>
-                    </div>-->
-                  </div>
-                </div>
-                  <div v-if="selectedJob" class="job-detail">
-                  <h3>{{ selectedJob.job_title || selectedJob.name || '职位详情' }}</h3>
-                  <p>行业: {{ selectedJob.industry_name || selectedJob.industryName || '-' }}</p>
-                  <p>招聘数量: {{ formatNum(selectedJob.count || selectedJob.records || selectedJob.num) }}</p>
-                  <p>平均薪资: {{ formatNum(selectedJob.median_salary || selectedJob.salary || '-') }}</p>
-                  <p>经验要求: {{ formatFloat(selectedJob.experience_rank || selectedJob.avg_experience_rank || '-') }}</p>
-                  <div style="display:flex;gap:8px;margin-top:8px;">
-                    <button class="btn" @click="() => { /* 可扩展：跳转到详情 */ }">查看职位详情</button>
-                    <button class="btn" @click="() => focusNebula(selectedJob.industry_id || selectedJob.industryId || selectedJob.industry_name || selectedJob.industryName)">定位到星云</button>
-                  </div>
-                </div>
-                <!-- hoverIndustry no longer controls the side panel; only selectedIndustry/currentIndustryData does -->
-                <div v-else-if="currentIndustryData" class="industry-detail">
-                  <h3>{{ currentIndustryData.industry_name || currentIndustryData.company_type || '行业详情' }}</h3>
-                  <p>招聘总数: {{ formatNum(currentIndustryData.national_job_count) }}</p>
-                  <p>平均薪资: {{ formatNum(currentIndustryData.avg_median_salary) }}</p>
-                  <p>平均经验: {{ formatFloat(currentIndustryData.avg_experience_rank) }}</p>
-                  <p>平均学历(归一化): {{ formatFloat(currentIndustryData.avg_education_rank_normalized) }}</p>
-                  <h4>Top 5 职位（按招聘数量）</h4>
-                  <ul class="top-jobs">
-                    <li v-for="(job, idx) in getTopByCount(currentIndustryData)" :key="idx" style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
-                      <span>{{ job.name || job.job_title }} <span class="tag">{{ job.count || job.records || '' }}</span></span>
-                      <button class="btn" @click="() => onSelectJob(job)" style="padding:6px 8px;font-size:12px;">显示职位</button>
-                    </li>
-                  </ul>
-                </div>
-                <div v-else class="industry-list">
-                  <h4>热门行业 Top 2（按招聘总数）</h4>
-                  <div v-if="topTwo && topTwo.length">
-                    <div v-for="(it, idx) in topTwo" :key="idx" class="top-card">
-                      <div class="top-card-title">{{ it.industry_name || it.company_type || '行业' }}</div>
-                      <div class="top-card-row">招聘总数: <b>{{ formatNum(it.national_job_count || it.count || it.records) }}</b></div>
-                      <div class="top-card-row">平均薪资: <b>{{ formatNum(it.avg_median_salary || it.median_salary || it.salary) }}</b></div>
-                      <div class="top-card-row">经验: <b>{{ formatFloat(it.avg_experience_rank) }}</b></div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div v-if="!roseData && !roseLoading && !roseError" class="empty-state">
-            <p>点击上方按钮加载数据</p>
-          </div>
-        </div>
-      </div>
-    </div>
-    </div>
-
-    <!-- 分页按钮 -->
-    <div class="pager">
-      <button class="btn" :disabled="currentPage === 1" @click="goPrev">上一页</button>
-      <span class="page-indicator">第 {{ currentPage }} / 2 页</span>
-      <button class="btn" :disabled="currentPage === 2" @click="goNext">下一页</button>
-    </div>
   </section>
 </template>
 
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
-import { useFetchData, useCachedFetchData } from '@/utils/fetchData.js'
-import { getJobRanking } from '@/api/industryApi.js'
-import { getIndustryTrendRose } from '@/api/industryApi.js'
-import { getQ5ForceEmergingJobs, getQ5ForceJobNetwork } from '@/api/industryApi.js'
-import MultiIconBarChart from '@/components/charts/MultiIconBarChart.vue'
-import ContinuousProgressBarChart from '@/components/charts/ContinuousProgressBarChart.vue'
-import * as d3 from 'd3'
-import RoseNestedPolar from '@/components/charts/RoseNestedPolar.vue'
-import IndustryNebula from '@/components/charts/IndustryNebula.vue'
+import { useFetchData } from '@/utils/fetchData.js'
+import { getQ5ForceEmergingJobs, getQ5ForceJobNetwork, getJobRanking, getQ5ForceContrastJobs } from '@/api/industryApi.js'
 import Q5ForceAtlasGraph from '@/components/charts/Q5ForceAtlasGraph.vue'
 
-const currentPage = ref(1)
-const goPrev = () => {
-  if (currentPage.value > 1) currentPage.value -= 1
-}
-const goNext = () => {
-  if (currentPage.value < 2) {
-    currentPage.value += 1
-    // 如果切换到第2页，自动加载玫瑰图数据
-    if (currentPage.value === 2) {
-      autoLoadRoseData()
-    }
-  }
-}
-
-// 自动加载玫瑰图数据
-const autoLoadRoseData = async () => {
-  try {
-    await handleLoadIndustryRose()
-  } catch (err) {
-    console.error('自动加载玫瑰图数据失败:', err)
-  }
-}
-
-// 监听页面变化，当切换到第2页时自动加载数据
-watch(currentPage, (newPage) => {
-  if (newPage === 2) {
-    autoLoadRoseData()
-  }
-})
-
-// 组件挂载时自动加载数据
-onMounted(() => {
-  // 如果在第1页，自动加载职位排名数据
-  if (currentPage.value === 1) {
-    handleLoadChart()
-    autoLoadForceData()
-  }
-  // 如果在第2页，自动加载玫瑰图数据
-  if (currentPage.value === 2) {
-    autoLoadRoseData()
-  }
-})
-
-const { data: chartData, loading, error, execute } = useCachedFetchData(getJobRanking, 'jobRankingData', 7 * 24 * 60 * 60 * 1000) // 7天缓存
-const { data: roseData, loading: roseLoading, error: roseError, execute: executeRose } = useFetchData(getIndustryTrendRose)
 const { data: forceJobsData, loading: forceJobsLoading, error: forceJobsError, execute: executeForceJobs } = useFetchData(getQ5ForceEmergingJobs)
+const { data: rankingData, loading: rankingLoading, error: rankingError, execute: executeRanking } = useFetchData(getJobRanking)
+const { data: contrastSourceData, loading: contrastSourceLoading, error: contrastSourceError, execute: executeContrastSource } = useFetchData(getQ5ForceContrastJobs)
 
 const forceTier = ref('all')
 const forceTopKIndustry = ref(12)
 const activeForceJobTitle = ref('')
-const forceJobs = computed(() => forceJobsData.value?.data?.jobs || [])
-const activeForceJob = computed(() => forceJobs.value.find(j => j.job_title === activeForceJobTitle.value) || null)
+const hideOtherForceGraphs = ref(false)
+const selectedContrastJobTitle = ref('')
 const forceAtlasLoading = ref(false)
 const forceAtlasError = ref('')
 const forceNetworkByJob = ref({})
+const contrastNetworkByJob = ref({})
+
+const forceJobs = computed(() => forceJobsData.value?.data?.jobs || [])
+const activeForceJob = computed(() => forceJobs.value.find(j => j.job_title === activeForceJobTitle.value) || null)
+
+const contrastJobs = computed(() => {
+  const emergingTitles = new Set(forceJobs.value.map(j => j.job_title))
+  const fallbackJobs = () => {
+    const fallbackRaw = Array.isArray(contrastSourceData.value?.data?.jobs) ? contrastSourceData.value.data.jobs : []
+    return fallbackRaw
+      .filter((j) => j?.job_title && !emergingTitles.has(j.job_title))
+      .map((j) => ({
+        job_title: j.job_title,
+        records_count: Number(j.records_count || 0),
+        contrast_tag: j.contrast_tag || '常规对比型'
+      }))
+      .slice(0, 6)
+  }
+
+  const all = Array.isArray(rankingData.value?.data?.jobs) ? rankingData.value.data.jobs : []
+  if (!all.length) return fallbackJobs()
+
+  const candidates = all
+    .filter((j) => j?.job_title && !emergingTitles.has(j.job_title))
+    .map((j) => ({
+      job_title: j.job_title,
+      // ranking 接口当前提供的是归一化规模字段，这里还原为可比较的“伪规模”
+      records_count: Number(j.records_count || j.job_count || 0),
+      records_count_norm: Number(j.records_count_norm || 0),
+      approx_count: Number(j.records_count || j.job_count || 0) > 0
+        ? Number(j.records_count || j.job_count || 0)
+        : Math.round(Number(j.records_count_norm || 0) * 10000),
+      avg_education_rank: Number(j.avg_education_rank || j.education_rank || 0),
+      avg_experience_rank: Number(j.avg_experience_rank || j.experience_rank || 0),
+      composite_score: Number(j.composite_score || 0)
+    }))
+    .filter((j) => (j.approx_count > 0 || j.records_count_norm > 0))
+
+  if (!candidates.length) return fallbackJobs()
+
+  // 前端轻量多样性挑选：规模/门槛/综合分差异拉开
+  const logs = candidates.map((j) => Math.log1p(Math.max(1, j.approx_count)))
+  const edu = candidates.map((j) => j.avg_education_rank)
+  const exp = candidates.map((j) => j.avg_experience_rank)
+  const scs = candidates.map((j) => j.composite_score)
+  const norm = (v, arr) => {
+    const lo = Math.min(...arr); const hi = Math.max(...arr)
+    if (!Number.isFinite(lo) || !Number.isFinite(hi) || hi <= lo) return 0.5
+    return (v - lo) / (hi - lo)
+  }
+  const vec = (j) => [
+    norm(Math.log1p(Math.max(1, j.approx_count)), logs),
+    norm(j.avg_education_rank, edu),
+    norm(j.avg_experience_rank, exp),
+    norm(j.composite_score, scs)
+  ]
+  const dist = (a, b) => Math.sqrt(a.reduce((s, x, i) => s + (x - b[i]) ** 2, 0))
+
+  const byCount = [...candidates].sort((a, b) => b.approx_count - a.approx_count)
+  const picks = []
+  if (byCount[0]) picks.push(byCount[0])
+  const lowScore = [...candidates].sort((a, b) => a.composite_score - b.composite_score)[0]
+  if (lowScore && !picks.find((x) => x.job_title === lowScore.job_title)) picks.push(lowScore)
+  while (picks.length < 6) {
+    let best = null
+    let bestScore = -1
+    for (const c of candidates) {
+      if (picks.find((x) => x.job_title === c.job_title)) continue
+      const vc = vec(c)
+      const d = picks.length ? Math.min(...picks.map((p) => dist(vc, vec(p)))) : 0
+      const score = d + 0.12 * vc[0]
+      if (score > bestScore) { best = c; bestScore = score }
+    }
+    if (!best) break
+    picks.push(best)
+  }
+
+  const rankingPicks = picks.slice(0, 6).map((j) => {
+    const barrier = (j.avg_education_rank + j.avg_experience_rank) / 2
+    let contrast_tag = '常规对比型'
+    if (j.approx_count >= byCount[Math.floor(Math.max(0, byCount.length * 0.2))]?.approx_count) contrast_tag = '高规模普及型'
+    if (barrier >= 7) contrast_tag = '高门槛型'
+    if (j.composite_score <= 0.15) contrast_tag = '低综合稳态型'
+    return { ...j, records_count: j.approx_count, contrast_tag }
+  })
+
+  if (rankingPicks.length) return rankingPicks
+
+  // 兜底：当排名来源无法提供足够候选（例如旧后端固定 top5）时，用专用对比接口
+  return fallbackJobs()
+})
 
 const activeForceNetwork = computed(() => {
   if (!activeForceJobTitle.value) return null
@@ -415,30 +257,26 @@ const forceAtlasNetworks = computed(() => {
           }
         })
       : []
-    return {
-      ...network,
-      nodes
-    }
+
+    return { ...network, nodes }
   }).filter(Boolean)
 })
 
-const handleLoadChart = async () => {
-  try {
-    console.log('正在加载职位排名数据...')
-    await execute()
-    console.log('职位排名数据加载完成')
-  } catch (err) {
-    console.error('加载职位排名数据失败:', err)
-  }
-}
+const selectedContrastNetwork = computed(() => {
+  if (!selectedContrastJobTitle.value) return null
+  return contrastNetworkByJob.value[selectedContrastJobTitle.value] || null
+})
 
-const handleLoadIndustryRose = async () => {
-  try {
-    await executeRose()
-  } catch (err) {
-    console.error('加载行业玫瑰图数据失败:', err)
-  }
-}
+const displayedForceNetworks = computed(() => {
+  if (!hideOtherForceGraphs.value) return forceAtlasNetworks.value
+
+  const focused = activeForceNetwork.value
+  const contrast = selectedContrastNetwork.value
+  const arr = []
+  if (focused) arr.push(focused)
+  if (contrast) arr.push(contrast)
+  return arr
+})
 
 const loadForceAtlasNetworks = async () => {
   const jobs = forceJobs.value
@@ -470,9 +308,7 @@ const loadForceAtlasNetworks = async () => {
 
 const autoLoadForceData = async () => {
   try {
-    if (!forceJobs.value.length) {
-      await executeForceJobs(5)
-    }
+    await executeForceJobs(5)
     if (!activeForceJobTitle.value && forceJobs.value.length) {
       activeForceJobTitle.value = forceJobs.value[0].job_title
     }
@@ -482,172 +318,86 @@ const autoLoadForceData = async () => {
   }
 }
 
-const selectForceJob = async (jobTitle) => {
+const loadContrastNetwork = async (jobTitle) => {
+  if (!jobTitle) return
+  if (contrastNetworkByJob.value[jobTitle]) return
+  forceAtlasLoading.value = true
+  forceAtlasError.value = ''
+  try {
+    const res = await getQ5ForceJobNetwork(jobTitle, forceTopKIndustry.value, forceTier.value)
+    if (res?.data) {
+      contrastNetworkByJob.value = { ...contrastNetworkByJob.value, [jobTitle]: res.data }
+    }
+  } catch (err) {
+    forceAtlasError.value = err?.message || '加载对比引力图失败'
+  } finally {
+    forceAtlasLoading.value = false
+  }
+}
+
+const selectForceJob = (jobTitle) => {
   if (!jobTitle) return
   activeForceJobTitle.value = jobTitle
 }
 
+const selectContrastJob = async (jobTitle) => {
+  if (!jobTitle) return
+  selectedContrastJobTitle.value = jobTitle
+  await loadContrastNetwork(jobTitle)
+}
+
+const formatNum = (val) => {
+  const n = Number(val)
+  if (!Number.isFinite(n)) return '-'
+  return n.toLocaleString()
+}
+
+const formatFloat = (val, d = 2) => {
+  const n = Number(val)
+  if (!Number.isFinite(n)) return '-'
+  return n.toFixed(d)
+}
+
 watch([forceTier, forceTopKIndustry], async () => {
-  if (currentPage.value === 1 && forceJobs.value.length) {
+  if (forceJobs.value.length) {
+    contrastNetworkByJob.value = {}
     await loadForceAtlasNetworks()
-  }
-})
-
-// compute top two industries by job count for default display
-const topTwo = computed(() => {
-  const industries = roseData.value?.data?.industries
-  if (!industries) return []
-
-  const arr = industries.filter(Boolean).map(i => ({ ...i }))
-  if (!arr.length) return []
-
-  arr.sort((a, b) => {
-    const av = Number(a?.national_job_count ?? a?.count ?? a?.records) || 0
-    const bv = Number(b?.national_job_count ?? b?.count ?? b?.records) || 0
-    return bv - av
-  })
-
-  return arr.slice(0, 2)
-})
-
-// 联动状态：选中的行业 / 职位
-const selectedIndustry = ref(null)
-const selectedJob = ref(null)
-const roseHover = ref(false)
-const roseRef = ref(null)
-const nebulaZoom = ref(false)
-const nebulaControls = ref({
-  fogEnabled: true,
-  heatIntensity: 1.0,
-  footprintDecay: 0.06,
-  terrainMode: false,
-  terrainSmooth: 0.6
-})
-const selectedIndustryRaw = ref(null)
-
-// legend / mapping helpers
-const salaryExtent = computed(() => {
-  const arr = (roseData?.data?.industries || []).map(d => Number(d.avg_median_salary) || 0)
-  if (!arr.length) return [0, 1]
-  return [Math.min(...arr), Math.max(...arr)]
-})
-const countExtent = computed(() => {
-  const arr = (roseData?.data?.industries || []).map(d => Number(d.national_job_count || d.count || d.records) || 0)
-  if (!arr.length) return [0, 1]
-  return [Math.min(...arr), Math.max(...arr)]
-})
-function salaryColorStops(n = 6) {
-  const [minS, maxS] = salaryExtent.value
-  const stops = []
-  for (let i = 0; i <= n; i++) {
-    const t = i / n
-    const color = d3.interpolateMagma(t)
-    stops.push(`${color} ${Math.round(t*100)}%`)
-  }
-  return stops.join(', ')
-}
-function mapCountToPx(v) {
-  const [minC, maxC] = countExtent.value
-  const raw = Number(v) || 0
-  const t = maxC > minC ? (raw - minC) / (maxC - minC) : 0.5
-  const minPx = 8, maxPx = 64
-  return Math.round(minPx + (maxPx - minPx) * Math.sqrt(Math.max(0, Math.min(1, t))))
-}
-
-function onSectorClick(payload) {
-  // payload: { industryId, raw }
-  selectedIndustry.value = payload.industryId
-  // semantic transition: fade/scale rose and zoom nebula
-  nebulaZoom.value = true
-  // add class to rose to shrink/fade
-  const roseEl = document.querySelector('.rose-wrapper')
-  if (roseEl) roseEl.classList.add('rose-transitioning')
-  focusNebula(payload.industryId)
-  setTimeout(() => {
-    nebulaZoom.value = false
-    if (roseEl) roseEl.classList.remove('rose-transitioning')
-  }, 900)
-}
-
-function onIndustryEnter(rawIndustry) {
-  // nebula 发来行业进入事件
-  selectedIndustry.value = rawIndustry.id ?? rawIndustry.industry_name ?? null
-  // store raw object for direct display
-  selectedIndustryRaw.value = rawIndustry
-  // clear hover override so info panel shows the entered industry
-  hoverIndustry.value = null
-}
-
-function onSelectJob(job) {
-  selectedJob.value = job
-  // 也把所属行业同步为选中
-  if (job && job.industry_id) selectedIndustry.value = job.industry_id
-  // 反向联动：让玫瑰高亮并短暂放大；并滚动到星云、触发聚焦
-  try {
-    if (roseRef && roseRef.value && selectedIndustry.value) {
-      roseRef.value.focusOnIndustry(selectedIndustry.value)
+    if (hideOtherForceGraphs.value && selectedContrastJobTitle.value) {
+      await loadContrastNetwork(selectedContrastJobTitle.value)
     }
-  } catch (e) { /* ignore */ }
-  focusNebula(selectedIndustry.value)
-}
-
-function focusNebula(indust) {
-  if (!indust) return
-  selectedIndustry.value = indust
-  const el = document.querySelector('.nebula-chart-wrapper')
-  if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-}
-
-function onRoseHoverStart() {
-  roseHover.value = true
-}
-function onRoseHoverEnd() {
-  roseHover.value = false
-}
-
-const currentIndustryData = computed(() => {
-  if (selectedIndustryRaw.value) return selectedIndustryRaw.value
-  if (!roseData?.data?.industries || !selectedIndustry.value) return null
-  return roseData.data.industries.find(i => {
-    return i.id === selectedIndustry.value || i.industry_name === selectedIndustry.value || i.company_type === selectedIndustry.value
-  }) || null
+  }
 })
 
-function formatNum(v) {
-  const n = Number(v)
-  return Number.isFinite(n) ? n.toLocaleString() : '-'
-}
-function formatFloat(v, d = 2) {
-  const n = Number(v)
-  return Number.isFinite(n) ? n.toFixed(d) : '-'
-}
+watch(hideOtherForceGraphs, async (v) => {
+  if (!v) return
+  if (!contrastJobs.value.length) {
+    await executeContrastSource(6, 5)
+  }
+  if (!selectedContrastJobTitle.value && contrastJobs.value.length) {
+    selectedContrastJobTitle.value = contrastJobs.value[0].job_title
+  }
+  if (selectedContrastJobTitle.value) {
+    await loadContrastNetwork(selectedContrastJobTitle.value)
+  }
+})
 
-// 新增：玫瑰扇区 hover 显示（不触发地图）
-const hoverIndustry = ref(null)
-function onSectorHover(raw) {
-  hoverIndustry.value = raw
-}
-function onSectorOut() {
-  hoverIndustry.value = null
-}
-function onNebulaHover(raw) {
-  hoverIndustry.value = raw
-}
-function getTopByCount(industry) {
-  if (!industry || !Array.isArray(industry.top_jobs)) return []
-  return [...industry.top_jobs].sort((a, b) => {
-    const av = Number(a.count || a.records || 0)
-    const bv = Number(b.count || b.records || 0)
-    return bv - av
-  }).slice(0, 5)
-}
-function getEmergingJobs(industry) {
-  if (!industry || !Array.isArray(industry.top_jobs)) return []
-  const emergings = industry.top_jobs.filter(j => Boolean(j.is_emerging) || (Number(j.score) || 0) > 0.8 || (Number(j.count) || 0) > 200)
-  if (emergings.length) return emergings.slice(0, 5)
-  // fallback to top by count if no explicit emerging flag
-  return getTopByCount(industry)
-}
+watch(contrastJobs, async (list) => {
+  if (!hideOtherForceGraphs.value) return
+  if (selectedContrastJobTitle.value && !list.find((j) => j.job_title === selectedContrastJobTitle.value)) {
+    selectedContrastJobTitle.value = ''
+  }
+  if (!selectedContrastJobTitle.value && list.length) {
+    selectedContrastJobTitle.value = list[0].job_title
+    await loadContrastNetwork(selectedContrastJobTitle.value)
+  }
+})
+
+onMounted(async () => {
+  await Promise.all([autoLoadForceData(), executeRanking(180), executeContrastSource(6, 5)])
+  if (selectedContrastJobTitle.value) {
+    await loadContrastNetwork(selectedContrastJobTitle.value)
+  }
+})
 </script>
 
 <style scoped>
@@ -655,371 +405,239 @@ function getEmergingJobs(industry) {
   --q5-border: rgba(80, 111, 174, 0.14);
   --q5-text-main: #10315d;
   --q5-text-sub: #58739a;
-  width: 100%;
   display: flex;
   flex-direction: column;
   gap: 14px;
-  padding: 14px;
-  border-radius: 16px;
-  background: radial-gradient(circle at 12% 12%, #f3f7ff 0%, #eef3fb 35%, #e9eef8 100%);
 }
 
 .q5-hero,
 .q5-workspace {
-  background: rgba(255, 255, 255, 0.92);
   border: 1px solid var(--q5-border);
   border-radius: 14px;
-  box-shadow: 0 8px 20px rgba(64, 89, 138, 0.08);
+  background: linear-gradient(180deg, #fafdff 0%, #f3f8ff 100%);
 }
 
 .q5-hero {
-  padding: 16px 18px;
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 16px;
+  padding: 14px 16px;
 }
 
 .q5-hero h2 {
   margin: 0;
+  font-size: 24px;
   color: var(--q5-text-main);
-  font-size: 28px;
-  line-height: 1.2;
 }
 
 .q5-hero p {
-  margin: 8px 0 0;
+  margin: 6px 0 0;
   color: var(--q5-text-sub);
-  font-size: 14px;
-}
-
-.hero-page-chip {
-  color: #2e507f;
-  background: #eef4ff;
-  border: 1px solid #d1dff5;
-  border-radius: 999px;
-  padding: 5px 10px;
-  font-size: 12px;
-  font-weight: 700;
+  font-size: 13px;
 }
 
 .q5-workspace {
   padding: 12px;
 }
 
-.page-block {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.charts-container {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 20px;
-  width: 100%;
-}
-
 .chart-section {
-  min-width: 0;
-  border: 1px solid #d9e4f6;
-  border-radius: 12px;
-  background: linear-gradient(180deg, #ffffff 0%, #f9fcff 100%);
-  padding: 12px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
-}
-
-.chart-left,
-.chart-right {
-  display: flex;
-  flex-direction: column;
-}
-.chart-full {
-  margin-top: 6px;
-}
-.force-inline-first-page {
-  margin-top: 6px;
-}
-.nebula-container {
-  display: flex;
-  gap: 16px;
-  align-items: flex-start;
-  flex-wrap: wrap;
-}
-.nebula-container > * {
-  flex: 1 1 0;
-}
-.nebula-chart {
-  min-width: 300px;
-  max-width: 100%;
-  flex: 1 1 600px;
-}
-.rose-chart {
-  flex: 0 0 420px; /* 保证玫瑰图有固定可见宽度 */
-  min-width: 360px;
-  max-width: 48%;
-}
-.info-panel {
-  width: 320px;
-  padding: 12px;
   background: #fff;
-  border-radius: 10px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.08);
-}
-.industry-list .top-card { background: linear-gradient(180deg,#fff,#fafafa); border-radius:8px; padding:10px; margin-bottom:8px; border:1px solid #eef3f6 }
-.industry-list .top-card-title { font-weight:700; color:#0b4a8a; margin-bottom:6px }
-.industry-list .top-card-row { font-size:13px; color:#445; margin:4px 0 }
-.info-panel h3 { margin: 0 0 8px; font-size: 16px; color: #0b4a8a }
-.info-panel p { margin: 6px 0; color: #455; font-size: 13px }
-.top-jobs { padding-left: 16px; margin: 8px 0 }
-.top-jobs .tag { background: #f0f0f0; padding: 2px 6px; border-radius: 6px; margin-left: 8px; font-size:12px }
-.job-detail .btn { margin-top:8px; width:100% }
-.nebula-vertical { display:flex; flex-direction:column; gap:18px; width:100%; align-items:stretch; }
-.rose-section { display: flex; gap: 16px; align-items: flex-start; width: 100%; margin-bottom: 24px; }
-.top-cards-sidebar { flex: 0 0 220px; display: flex; flex-direction: column; gap: 12px; }
-.top-card-small { background: linear-gradient(180deg,#fff,#fafafa); border-radius:8px; padding:10px; border:1px solid #eef3f6; font-size: 12px; }
-.top-card-small .top-card-title { font-weight:700; color:#0b4a8a; margin-bottom:4px; font-size: 13px; }
-.top-card-small .top-card-row { margin:2px 0; color:#445; }
-.top-card-small.placeholder { background: linear-gradient(180deg,#f9f9f9,#f5f5f5); border:1px dashed #ddd; }
-.top-card-small.placeholder .top-card-title { color:#999; }
-.top-card-small.placeholder .top-card-row { color:#ccc; }
-.rose-wrapper { flex: 1 1 auto; display:block; position:sticky; top:12px; align-self:flex-start; min-height:420px; padding-top:24px; padding-bottom:24px; background:transparent; z-index:40; }
-.rose-wrapper .rose-chart { position:relative; left:auto; top:auto; transform:none; width:100%; max-width:1100px; margin:0 auto; background: transparent !important; box-shadow: none !important; border-radius: 0 !important; padding: 0 !important; }
-.rose-wrapper .rose-chart .chart-container { height: 460px !important; min-height: 380px; width:100%; background: transparent !important; box-shadow: none !important; border-radius: 0 !important; padding: 0 !important; overflow: visible !important; }
-.nebula-row { display:flex; gap:16px; align-items:flex-start; width:100%; }
-.nebula-chart-wrapper { flex:1 1 0; min-height:640px; display:flex; justify-content:center; align-items:stretch; }
-.nebula-chart-wrapper .nebula-chart { width:100%; height:100%; min-height:640px; display:block; }
-.info-panel { flex: 0 0 320px; max-height: 640px; overflow:auto; }
-.nebula-disabled .industry-nebula,
-.nebula-disabled canvas {
-  pointer-events: none !important;
-  user-select: none !important;
+  border: 1px solid rgba(86, 122, 182, 0.16);
+  border-radius: 12px;
+  padding: 12px;
 }
 
-.chart-section > h3 {
+.chart-section h3 {
   margin: 0 0 10px;
-  color: #153a6a;
-  font-size: 22px;
-}
-
-.chart-description {
-  margin-bottom: 20px;
-  color: #666;
-  line-height: 1.6;
-  font-size: 14px;
-}
-
-.chart-description strong {
-  color: #5470c6;
-  font-weight: 600;
-}
-
-.api-section {
-  margin-top: 8px;
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-}
-
-
-.btn {
-  padding: 9px 14px;
-  background: linear-gradient(135deg, #2f6df6 0%, #1b57dc 100%);
-  color: white;
-  border: none;
-  border-radius: 10px;
-  font-size: 14px;
-  cursor: pointer;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-  margin-bottom: 12px;
-  box-shadow: 0 6px 14px rgba(47, 109, 246, 0.24);
-}
-
-.btn:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 8px 18px rgba(47, 109, 246, 0.3);
-}
-
-.btn:disabled {
-  background: #ccc;
-  cursor: not-allowed;
+  font-size: 18px;
+  color: #204a7e;
 }
 
 .error-message {
-  padding: 15px;
-  background: #fee;
-  border: 1px solid #fcc;
-  border-radius: 4px;
-  color: #c33;
-  margin-bottom: 20px;
+  padding: 8px 10px;
+  border: 1px solid #efc5c5;
+  border-radius: 8px;
+  color: #b14e4e;
+  background: #fff8f8;
+  margin-bottom: 8px;
 }
 
-.empty-state {
-  padding: 40px;
-  text-align: center;
-  color: #999;
-  font-size: 14px;
-}
-
-.pager {
-  margin-top: 2px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  background: rgba(255, 255, 255, 0.9);
-  border: 1px solid var(--q5-border);
-  border-radius: 12px;
-  padding: 10px;
-}
-
-.page-indicator {
-  color: #3d5f8c;
-  font-size: 13px;
-  font-weight: 700;
-}
 .force-top-console {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 12px;
-  margin-bottom: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
 }
+
 .force-job-card {
-  border: 1px solid rgba(122, 159, 214, 0.24);
-  border-radius: 14px;
-  padding: 12px;
+  border: 1px solid #c7d6ec;
+  background: linear-gradient(180deg, #ffffff 0%, #f7fbff 100%);
+  border-radius: 10px;
+  padding: 10px;
   text-align: left;
-  background: linear-gradient(160deg, rgba(236, 244, 255, 0.96) 0%, rgba(246, 250, 255, 0.96) 100%);
-  color: #173654;
   cursor: pointer;
-  transition: all 0.25s ease;
 }
-.force-job-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 10px 18px rgba(47, 97, 166, 0.14);
-}
+
 .force-job-card.active {
-  border-color: rgba(66, 135, 245, 0.88);
-  background: linear-gradient(155deg, rgba(12, 34, 61, 0.98) 0%, rgba(20, 55, 94, 0.98) 100%);
-  color: #e2efff;
-  box-shadow: 0 12px 20px rgba(16, 45, 84, 0.32);
+  border-color: #5f8fdc;
+  box-shadow: 0 0 0 2px rgba(95, 143, 220, 0.18);
 }
+
 .force-job-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #5f8fdc;
+  color: #fff;
+  font-size: 12px;
   font-weight: 700;
-  margin-bottom: 8px;
-  background: rgba(98, 145, 223, 0.2);
+  margin-bottom: 6px;
 }
-.force-job-card.active .force-job-icon {
-  background: rgba(120, 200, 255, 0.24);
-  box-shadow: 0 0 14px rgba(120, 200, 255, 0.42);
-}
+
 .force-job-title {
   font-weight: 700;
-  font-size: 13px;
-  word-break: break-all;
-  margin-bottom: 8px;
+  color: #1f4576;
+  margin-bottom: 6px;
 }
+
 .force-job-metrics {
   display: flex;
   justify-content: space-between;
-  gap: 10px;
   font-size: 12px;
-  margin-top: 4px;
+  color: #5f7fa7;
 }
-.force-job-metrics span {
-  opacity: 0.8;
-}
+
 .force-job-metrics b {
-  font-size: 12px;
+  color: #284f84;
 }
-.force-card-loading {
-  grid-column: 1 / -1;
+
+.force-card-loading,
+.force-map-loading {
+  color: #5f7fa7;
   font-size: 13px;
-  color: #5f7598;
+  padding: 8px 4px;
 }
+
 .force-controls {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   margin-bottom: 12px;
-  color: #425a77;
+  flex-wrap: wrap;
+}
+
+.force-controls label,
+.force-controls span {
+  color: #4f6f9b;
   font-size: 13px;
 }
+
+.switch-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 8px;
+}
+
+.switch-inline input {
+  accent-color: #2f6ed8;
+}
+
+.mode-hint {
+  color: #5a7ea8;
+  font-size: 12px;
+}
+
 .force-controls select {
-  border: 1px solid #d2dff0;
+  border: 1px solid #c8d9f0;
   border-radius: 8px;
   padding: 4px 8px;
   background: #f8fbff;
+  color: #2d5587;
 }
+
+.contrast-panel {
+  margin-bottom: 12px;
+  padding: 10px;
+  border: 1px dashed #c8d9f0;
+  border-radius: 10px;
+  background: #f8fbff;
+}
+
+.contrast-panel h4 {
+  margin: 0 0 8px;
+  color: #2a5286;
+  font-size: 14px;
+}
+
+.contrast-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.contrast-chip {
+  border: 1px solid #c7d6ec;
+  border-radius: 999px;
+  background: #fff;
+  color: #2a4f80;
+  padding: 6px 10px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.contrast-chip .title {
+  font-weight: 600;
+}
+
+.contrast-chip .meta {
+  color: #6a87ac;
+  font-size: 12px;
+}
+
+.contrast-chip .tag {
+  color: #7b5b2a;
+  background: #fff4df;
+  border: 1px solid #f0d8ab;
+  border-radius: 999px;
+  padding: 1px 6px;
+  font-size: 11px;
+}
+
+.contrast-chip.active {
+  border-color: #5f8fdc;
+  box-shadow: 0 0 0 2px rgba(95, 143, 220, 0.18);
+}
+
 .force-summary-panel {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
   margin-bottom: 12px;
 }
+
 .force-kpi {
-  background: linear-gradient(165deg, rgba(11, 30, 54, 0.96) 0%, rgba(19, 51, 84, 0.96) 100%);
-  border: 1px solid rgba(120, 165, 227, 0.32);
-  border-radius: 12px;
+  border: 1px solid #d6e2f4;
+  border-radius: 8px;
   padding: 8px 10px;
-  color: #d9e8ff;
+  background: #f9fcff;
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 12px;
+  color: #5f7fa7;
 }
-.force-kpi span {
-  font-size: 11px;
-  opacity: 0.8;
-}
+
 .force-kpi b {
-  font-size: 14px;
-  font-weight: 700;
-  word-break: break-all;
+  color: #244a7b;
 }
+
 .force-map-wrapper {
-  margin-top: 6px;
-}
-.force-map-loading {
-  min-height: 560px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #516987;
-  font-size: 14px;
-}
-@media (max-width: 900px) {
-  .q5-hero {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-  .charts-container { grid-template-columns: 1fr; }
-  .rose-section { flex-direction: column; }
-  .top-cards-sidebar { flex: none; width: 100%; flex-direction: row; gap: 12px; }
-  .top-card-small { flex: 1; }
-  .rose-wrapper { flex: none; width: 100%; }
-  .nebula-row { flex-direction: column; }
-  .info-panel { width: 100%; max-height: none; }
-  .force-top-console { grid-template-columns: 1fr; }
-  .force-summary-panel { grid-template-columns: 1fr 1fr; }
-  .force-controls { flex-wrap: wrap; }
-}
-.rose-wrapper.rose-transitioning {
-  transform-origin: center;
-  transition: transform 600ms cubic-bezier(.22,.9,.2,1), opacity 600ms ease;
-  transform: scale(0.78);
-  opacity: 0.08;
-  pointer-events: none;
-}
-.nebula-chart-wrapper.nebula-zoomed {
-  transform-origin: center;
-  transition: transform 600ms cubic-bezier(.22,.9,.2,1);
-  transform: scale(1.08);
-  z-index: 60;
+  border: 1px solid #d4e0f2;
+  border-radius: 10px;
+  padding: 8px;
+  background: #fdfefe;
 }
 </style>

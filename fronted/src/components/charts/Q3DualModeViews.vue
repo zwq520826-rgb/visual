@@ -1,59 +1,5 @@
 <template>
   <div class="q3-dual-view">
-    <div class="toolbar">
-      <div class="toolbar-item">
-        <label>聚类数</label>
-        <select v-model.number="nClusters">
-          <option v-for="n in [4, 5, 6, 7]" :key="`k-${n}`" :value="n">{{ n }} 类</option>
-        </select>
-      </div>
-
-      <div class="toolbar-item">
-        <label>算法</label>
-        <select v-model="algorithm">
-          <option value="gmm">GMM</option>
-          <option value="kmeans">KMeans</option>
-        </select>
-      </div>
-
-      <div class="toolbar-item">
-        <label>样本量</label>
-        <select v-model.number="sampleSize">
-          <option :value="6000">6000</option>
-          <option :value="12000">12000</option>
-          <option :value="20000">20000</option>
-          <option :value="30000">30000</option>
-          <option :value="50000">50000</option>
-        </select>
-      </div>
-
-      <div class="toolbar-item">
-        <label>坐标模式</label>
-        <select v-model="coordMode" @change="renderScatter">
-          <option value="pca">聚类投影</option>
-          <option value="business">业务坐标</option>
-        </select>
-      </div>
-
-      <div class="toolbar-item">
-        <label>轮廓模式</label>
-        <select v-model="contourMode" @change="renderScatter">
-          <option value="circle">圆形</option>
-          <option value="original">原始</option>
-        </select>
-      </div>
-
-      <div class="toolbar-item">
-        <label>平行模式</label>
-        <select v-model="parallelMode" @change="renderParallel">
-          <option value="centroid">质心聚合</option>
-          <option value="sampled">分层抽样</option>
-        </select>
-      </div>
-
-      <button class="reload-btn" type="button" @click="reloadData">刷新聚类</button>
-    </div>
-
     <div v-if="loading" class="state">聚类计算中...</div>
     <div v-else-if="error" class="state error">{{ error }}</div>
     <div v-else-if="!points.length" class="state">暂无可用聚类数据</div>
@@ -878,6 +824,10 @@ const renderScatter = () => {
 }
 
 const lineHighlightedByScatter = (row) => {
+  // 与散点图簇筛选联动：选中簇时，仅高亮该簇对应线条
+  if (activeClusterId.value != null && Number(row.cluster_id || 0) !== Number(activeClusterId.value)) {
+    return false
+  }
   if (!scatterSelectedIds.value.length) return true
   if (parallelMode.value === 'centroid') {
     return selectedClusterSetFromScatter.value.has(Number(row.cluster_id || 0))
@@ -892,6 +842,15 @@ const rowToPointIds = (row) => {
   return [Number(row.id)]
 }
 
+const parallelRowValues = (row) => {
+  const vals = Array.isArray(row?.values) ? row.values : []
+  // 后端原始为 [education, experience, city_tier, company_type, salary_mean]
+  if (vals.length >= 5) return [vals[0], vals[1], vals[2], vals[4]]
+  // 兜底兼容：若后端以后直接给4维
+  if (vals.length === 4) return vals
+  return [0, 0, 0, 0]
+}
+
 const renderParallel = () => {
   try {
     renderError.value = ''
@@ -900,9 +859,7 @@ const renderParallel = () => {
 
   const edu = axisMeta.value.education_labels || ['大专及以下', '本科', '硕士', '博士及以上']
   const exp = axisMeta.value.experience_labels || ['无经验', '1年以下', '1-3年', '3-5年', '5-7年', '7-10年', '10年以上']
-  const city = axisMeta.value.city_labels || ['一线', '新一线', '二线', '其他']
-  const company = axisMeta.value.company_labels || ['Other']
-  const salaryRange = axisMeta.value.salary_range || [0, 100]
+  const city = axisMeta.value.city_labels || ['一线', '新一线', '二线', '三线', '其他']
 
   const sourceRows = (() => {
     if (parallelMode.value !== 'sampled') return parallelRows.value
@@ -940,7 +897,7 @@ const renderParallel = () => {
   const data = sourceRows.map((row) => {
     const picked = lineHighlightedByScatter(row)
     return {
-      value: row.values,
+      value: parallelRowValues(row),
       raw: row,
       lineStyle: {
         color: clusterColor(row.cluster_id),
@@ -954,7 +911,7 @@ const renderParallel = () => {
     animation: false,
     parallel: {
       left: 56,
-      right: 24,
+      right: 84,
       top: 56,
       bottom: 24,
       parallelAxisExpandable: true,
@@ -971,11 +928,10 @@ const renderParallel = () => {
       realtime: true
     },
     parallelAxis: [
-      { dim: 0, name: 'education', min: 0, max: Math.max(0, edu.length - 1), interval: 1, axisLabel: { formatter: (v) => edu[Math.round(v)] || '' } },
-      { dim: 1, name: 'experience', min: 0, max: Math.max(0, exp.length - 1), interval: 1, axisLabel: { formatter: (v) => exp[Math.round(v)] || '' } },
-      { dim: 2, name: 'city_tier', min: 0, max: Math.max(0, city.length - 1), interval: 1, axisLabel: { formatter: (v) => city[Math.round(v)] || '' } },
-      { dim: 3, name: 'company_type', min: 0, max: Math.max(0, company.length - 1), interval: 1, axisLabel: { formatter: (v) => company[Math.round(v)] || '' } },
-      { dim: 4, name: 'salary_mean', min: Number(salaryRange[0] || 0), max: Number(salaryRange[1] || 100) }
+      { dim: 0, name: '学历', min: 0, max: Math.max(0, edu.length - 1), interval: 1, axisLabel: { formatter: (v) => edu[Math.round(v)] || '' } },
+      { dim: 1, name: '经验', min: 0, max: Math.max(0, exp.length - 1), interval: 1, axisLabel: { formatter: (v) => exp[Math.round(v)] || '' } },
+      { dim: 2, name: '城市等级', min: 0, max: Math.max(0, city.length - 1), interval: 1, axisLabel: { formatter: (v) => city[Math.round(v)] || '' } },
+      { dim: 3, name: '薪资(K)', min: 0, max: 650, nameGap: 18 }
     ],
     tooltip: {
       trigger: 'item',
@@ -988,7 +944,6 @@ const renderParallel = () => {
           `学历：${d.education_label}`,
           `经验：${d.experience_label}`,
           `城市：${d.city_label}`,
-          `行业：${d.company_label}`,
           `薪资：${Number(d.salary_mean || 0).toFixed(1)}K`
         ].join('<br/>')
       }
@@ -1066,7 +1021,7 @@ const applyParallelAxisFilter = () => {
   }
 
   const matchedRows = parallelRows.value.filter((row) => {
-    const vals = row.values || []
+    const vals = parallelRowValues(row)
     return dims.every((d) => matchIntervals(vals[d], intervalsByDim[d]))
   })
 

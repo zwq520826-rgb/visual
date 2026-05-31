@@ -20,7 +20,7 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, watch, onMounted, onUnmounted } from 'vue'
 import * as echarts from 'echarts'
 
 const props = defineProps({
@@ -45,6 +45,7 @@ const props = defineProps({
 const chartContainer = ref(null)
 const hasData = ref(false)
 let chartInstance = null
+let renderTimer = 0
 
 const hexToRgba = (hex, alpha = 1) => {
   if (!hex || typeof hex !== 'string') return `rgba(79,125,232,${alpha})`
@@ -59,50 +60,42 @@ const hexToRgba = (hex, alpha = 1) => {
   return `rgba(${r},${g},${b},${alpha})`
 }
 
-// 监听数据变化
-watch(() => props.data, (newData) => {
-  console.log('SankeyChart: 数据变化', newData)
-  if (newData && newData.nodes && newData.links && newData.nodes.length > 0) {
-    hasData.value = true
-    console.log('SankeyChart: 设置hasData为true', {
-      nodes: newData.nodes.length,
-      links: newData.links.length
-    })
-    nextTick(() => {
-      setTimeout(() => {
-        renderChart()
-      }, 100)
-    })
-  } else {
-    console.log('SankeyChart: 数据格式不正确或为空', newData)
-    hasData.value = false
-  }
-}, { immediate: true, deep: true })
+const hasValidData = (d) => !!(d && Array.isArray(d.nodes) && Array.isArray(d.links) && d.nodes.length > 0)
 
-// 监听error状态
-watch(() => props.error, (error) => {
-  if (error) {
-    console.log('SankeyChart: 检测到错误，重置hasData', error)
-    hasData.value = false
+const scheduleRender = () => {
+  if (renderTimer) {
+    clearTimeout(renderTimer)
   }
-})
+  renderTimer = window.setTimeout(() => {
+    renderTimer = 0
+    renderChart()
+  }, 16)
+}
+
+watch(
+  () => [props.data, props.loading, props.error],
+  ([data, loadingState, errorState]) => {
+    if (errorState) {
+      hasData.value = false
+      return
+    }
+    hasData.value = hasValidData(data)
+    if (!loadingState && hasData.value) {
+      scheduleRender()
+    }
+  },
+  { immediate: true, deep: false }
+)
 
 // 渲染图表
 const renderChart = () => {
   if (!chartContainer.value || !props.data) {
-    console.log('SankeyChart: 容器或数据不存在，跳过渲染')
     return
   }
-
-  console.log('SankeyChart: 开始渲染图表')
-
-  // 销毁旧实例
-  if (chartInstance) {
-    chartInstance.dispose()
+  if (!hasValidData(props.data)) return
+  if (!chartInstance) {
+    chartInstance = echarts.init(chartContainer.value)
   }
-
-  // 创建新实例
-  chartInstance = echarts.init(chartContainer.value)
 
   const categoryColors = {
     '技能要求': '#4f7de8',
@@ -164,8 +157,8 @@ const renderChart = () => {
   })
 
   const option = {
-    animationDuration: 900,
-    animationDurationUpdate: 700,
+    animationDuration: 480,
+    animationDurationUpdate: 360,
     animationEasing: 'cubicOut',
     animationEasingUpdate: 'cubicOut',
     title: {
@@ -252,8 +245,7 @@ const renderChart = () => {
     }
   }
 
-  chartInstance.setOption(option)
-  console.log('SankeyChart: 图表渲染完成')
+  chartInstance.setOption(option, { notMerge: true, lazyUpdate: true })
 }
 
 // 窗口大小变化时重新渲染
@@ -268,6 +260,10 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  if (renderTimer) {
+    clearTimeout(renderTimer)
+    renderTimer = 0
+  }
   window.removeEventListener('resize', handleResize)
   if (chartInstance) {
     chartInstance.dispose()

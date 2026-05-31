@@ -1,0 +1,37 @@
+<svg width="1200" height="900" viewBox="0 0 1200 900" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="600" y1="60" x2="600" y2="840" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#E8F1FF"/>
+      <stop offset="1" stop-color="#D8E6FB"/>
+    </linearGradient>
+    <linearGradient id="land" x1="580" y1="120" x2="580" y2="760" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#D9E8FF"/>
+      <stop offset="1" stop-color="#BAD3F4"/>
+    </linearGradient>
+    <filter id="shadow" x="70" y="60" width="1060" height="760" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#7E9CC8" flood-opacity="0.18"/>
+    </filter>
+  </defs>
+
+  <rect x="0" y="0" width="1200" height="900" rx="26" fill="url(#bg)"/>
+
+  <g filter="url(#shadow)">
+    <path d="M175 270L250 210L342 187L416 198L495 166L590 182L694 167L779 210L862 195L938 248L974 320L948 395L982 487L926 572L838 607L770 593L716 654L623 691L528 669L468 607L383 571L318 549L264 491L236 411L187 350L175 270Z" fill="url(#land)" stroke="#8EB1E4" stroke-width="3"/>
+  </g>
+
+  <path d="M260 308L875 308" stroke="#AEC7EB" stroke-width="2" opacity="0.55"/>
+  <path d="M228 392L936 392" stroke="#AEC7EB" stroke-width="2" opacity="0.45"/>
+  <path d="M266 486L910 486" stroke="#AEC7EB" stroke-width="2" opacity="0.42"/>
+  <path d="M330 560L846 560" stroke="#AEC7EB" stroke-width="2" opacity="0.38"/>
+
+  <path d="M336 235L356 628" stroke="#AEC7EB" stroke-width="2" opacity="0.5"/>
+  <path d="M455 188L486 660" stroke="#AEC7EB" stroke-width="2" opacity="0.48"/>
+  <path d="M576 176L607 684" stroke="#AEC7EB" stroke-width="2" opacity="0.48"/>
+  <path d="M702 176L728 649" stroke="#AEC7EB" stroke-width="2" opacity="0.45"/>
+  <path d="M822 220L823 598" stroke="#AEC7EB" stroke-width="2" opacity="0.4"/>
+
+  <g opacity="0.85">
+    <path d="M952 664C972 650 998 654 1012 671C1028 690 1022 716 1001 730C978 746 949 739 935 717C922 697 929 677 952 664Z" fill="#CDE0FA" stroke="#99B8E7" stroke-width="2"/>
+    <path d="M1003 739C1014 731 1028 734 1034 746C1042 759 1037 776 1023 783C1008 790 991 785 984 772C977 760 985 747 1003 739Z" fill="#CDE0FA" stroke="#99B8E7" stroke-width="2"/>
+  </g>
+</svg>

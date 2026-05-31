@@ -136,22 +136,42 @@
             </span>
             路径流向图
           </h3>
-          <span class="tiny-badge">
-            <span class="inline-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none">
-                <path d="M6 18L18 6M8.2 6H18V15.8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
+          <div class="panel-head-actions">
+            <div class="mode-switch" role="group" aria-label="桑基图模式切换">
+              <button
+                type="button"
+                :class="['mode-btn', { active: sankeyMode === 'all' }]"
+                @click="setSankeyMode('all')"
+              >
+                整体模式
+              </button>
+              <button
+                type="button"
+                :class="['mode-btn', { active: sankeyMode === 'compare' }]"
+                @click="setSankeyMode('compare')"
+              >
+                对比模式
+              </button>
+            </div>
+            <span class="tiny-badge">
+              <span class="inline-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none">
+                  <path d="M6 18L18 6M8.2 6H18V15.8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </span>
+              占比（%）
             </span>
-            占比（%）
-          </span>
+          </div>
         </header>
-        <p class="panel-subtitle">技能水平 → 行业分布 → 市场需求 → 薪资水平</p>
+        <p class="panel-subtitle">
+          {{ sankeyMode === 'all' ? '整体模式：全局路径结构（技能水平 → 行业分布 → 市场需求 → 薪资水平）' : '对比模式：多职位并行路径对照（技能水平 → 行业分布 → 市场需求 → 薪资水平）' }}
+        </p>
         <div class="panel-body chart-shell">
           <SankeyChart
             :data="sankeyData?.data"
             :loading="sankeyLoading"
             :error="sankeyError"
-            empty-message="选择职位后点击【同步分析】"
+            :empty-message="sankeyEmptyMessage"
           />
         </div>
       </article>
@@ -330,7 +350,6 @@ const unifiedJobs = ref(['', '', ''])
 
 const selectedJobs = ref(['', '', ''])
 const sankeyJobs = ref(['', '', ''])
-const nestedJobs = ref(['', '', ''])
 
 const sankeyMode = ref('compare')
 const selectedDimensions = ref(['skill_level', 'industry_spread', 'market_demand'])
@@ -338,8 +357,13 @@ const sankeyData = ref(null)
 const sankeyLoading = ref(false)
 const sankeyError = ref(null)
 const SANKEY_JOB_COLORS = ['#2f6df6', '#ef5350', '#37b568']
+const sankeyEmptyMessage = computed(() => {
+  if (sankeyMode.value === 'all') {
+    return '点击【同步分析】加载整体模式路径图'
+  }
+  return '选择职位后点击【同步分析】'
+})
 
-const nestedData = ref(null)
 const cityBreadthScores = ref({})
 const cityPreferenceMarkers = ref([])
 const cityMapLoading = ref(false)
@@ -734,7 +758,6 @@ const loadJobTitles = async () => {
 const syncToAllViews = () => {
   selectedJobs.value = [...unifiedJobs.value]
   sankeyJobs.value = [...unifiedJobs.value]
-  nestedJobs.value = [...unifiedJobs.value]
 }
 
 const loadParallelData = async () => {
@@ -750,8 +773,15 @@ const loadSankeyData = async () => {
     sankeyLoading.value = true
     sankeyError.value = null
 
+    if (sankeyMode.value === 'all') {
+      const response = await getSankeyData('all', [], selectedDimensions.value)
+      sankeyData.value = response || null
+      return
+    }
+
     const validJobs = sankeyJobs.value.filter((job) => job && job.trim())
     if (!validJobs.length) {
+      sankeyData.value = null
       return
     }
 
@@ -854,19 +884,11 @@ const loadSankeyData = async () => {
   }
 }
 
-const loadNestedData = async () => {
-  const validJobs = nestedJobs.value.filter((job) => job && job.trim())
-  if (!validJobs.length) {
-    nestedData.value = null
-    return
-  }
-
-  try {
-    nestedData.value = await getNestedBarData(validJobs, null)
-  } catch (err) {
-    console.error('加载嵌套数据失败:', err)
-    nestedData.value = null
-  }
+const setSankeyMode = async (mode) => {
+  if (!['all', 'compare'].includes(mode)) return
+  if (sankeyMode.value === mode) return
+  sankeyMode.value = mode
+  await loadSankeyData()
 }
 
 const loadCityBreadthScores = async () => {
@@ -925,17 +947,15 @@ const loadCityBreadthScores = async () => {
 
 const runSyncAnalysis = async () => {
   syncToAllViews()
-  await Promise.all([loadParallelData(), loadSankeyData(), loadNestedData(), loadCityBreadthScores()])
+  await Promise.all([loadParallelData(), loadSankeyData(), loadCityBreadthScores()])
 }
 
 const resetAll = () => {
   unifiedJobs.value = ['', '', '']
   selectedJobs.value = ['', '', '']
   sankeyJobs.value = ['', '', '']
-  nestedJobs.value = ['', '', '']
   sankeyData.value = null
   sankeyError.value = null
-  nestedData.value = null
   cityBreadthScores.value = {}
   cityPreferenceMarkers.value = []
   selectedCityCode.value = ''
@@ -1127,6 +1147,14 @@ onMounted(async () => {
   gap: 10px;
 }
 
+.panel-head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .panel-header h3 {
   margin: 0;
   color: #132f60;
@@ -1155,6 +1183,33 @@ onMounted(async () => {
   font-weight: 700;
   padding: 5px 10px;
   border-radius: 999px;
+}
+
+.mode-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #edf3ff;
+  border: 1px solid #c9daf4;
+  border-radius: 999px;
+  padding: 3px;
+}
+
+.mode-btn {
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: #315d98;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+
+.mode-btn.active {
+  color: #ffffff;
+  background: linear-gradient(135deg, #2f6df6 0%, #1b57dc 100%);
+  box-shadow: 0 3px 8px rgba(47, 109, 246, 0.28);
 }
 
 .tiny-badge .inline-icon {

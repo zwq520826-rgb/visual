@@ -342,7 +342,7 @@ class Q1Service:
         query = """
             SELECT 
                 company_type,
-                national_job_count,
+                job_count,
                 avg_median_salary,
                 avg_experience_rank,
                 avg_education_rank
@@ -404,4 +404,3 @@ class Q1Service:
             "total_industries": len(scatter_points),
             "data": scatter_points
         }
-

@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 class Salary3DService:
     """三维薪资分析业务逻辑服务"""
-    CLUSTER_CACHE_VERSION = "q3_cluster_v14_fixed_k5_city_tier_fallback"
+    CLUSTER_CACHE_VERSION = "q3_cluster_v17_city_tier_sql_fix_recache"
     
     def __init__(self, db_manager: DatabaseManager):
         self.db_manager = db_manager
@@ -716,7 +716,11 @@ class Salary3DService:
             SELECT
                 js.job_title,
                 MIN(js.company_type) AS company_type,
-                MIN(js.city_tier) AS city_tier,
+                COALESCE(
+                    NULLIF(NULLIF(MIN(js.city_tier), '未知'), ''),
+                    MIN(ct.city_tier),
+                    '未知'
+                ) AS city_tier,
                 AVG(js.median_salary) AS median_salary,
                 AVG(js.q1_salary) AS q1_salary,
                 AVG(js.q3_salary) AS q3_salary,
@@ -726,6 +730,45 @@ class Salary3DService:
                 SUM(js.records_count) AS records_count,
                 AVG(js.total_shannon_entropy) AS total_shannon_entropy
             FROM job_summary js
+            LEFT JOIN (
+                SELECT
+                    t.job_title,
+                    CASE
+                        WHEN t.w_new_t1 >= GREATEST(t.w_t1, t.w_t2, t.w_t3, t.w_other) THEN '新一线'
+                        WHEN t.w_t1 >= GREATEST(t.w_new_t1, t.w_t2, t.w_t3, t.w_other) THEN '一线'
+                        WHEN t.w_t2 >= GREATEST(t.w_t1, t.w_new_t1, t.w_t3, t.w_other) THEN '二线'
+                        WHEN t.w_t3 >= GREATEST(t.w_t1, t.w_new_t1, t.w_t2, t.w_other) THEN '三线'
+                        ELSE '其他'
+                    END AS city_tier
+                FROM (
+                    SELECT
+                        cb.job_title,
+                        SUM(CASE WHEN INSTR(ctm.city_tier, '新一线') > 0 THEN COALESCE(cb.job_in_city_cnt, 1) ELSE 0 END) AS w_new_t1,
+                        SUM(CASE
+                              WHEN ctm.city_tier = '一线'
+                                OR (INSTR(ctm.city_tier, '一线') > 0 AND INSTR(ctm.city_tier, '新一线') = 0)
+                              THEN COALESCE(cb.job_in_city_cnt, 1) ELSE 0 END) AS w_t1,
+                        SUM(CASE WHEN INSTR(ctm.city_tier, '二线') > 0 THEN COALESCE(cb.job_in_city_cnt, 1) ELSE 0 END) AS w_t2,
+                        SUM(CASE WHEN INSTR(ctm.city_tier, '三线') > 0 THEN COALESCE(cb.job_in_city_cnt, 1) ELSE 0 END) AS w_t3,
+                        SUM(CASE
+                              WHEN ctm.city_tier IS NULL OR ctm.city_tier = ''
+                                OR (
+                                    INSTR(ctm.city_tier, '一线') = 0
+                                    AND INSTR(ctm.city_tier, '二线') = 0
+                                    AND INSTR(ctm.city_tier, '三线') = 0
+                                )
+                              THEN COALESCE(cb.job_in_city_cnt, 1) ELSE 0 END) AS w_other
+                    FROM cluster_by_city cb
+                    LEFT JOIN (
+                        SELECT city, MIN(city_tier) AS city_tier
+                        FROM city_type_statistics
+                        GROUP BY city
+                    ) ctm ON ctm.city = cb.city
+                    WHERE cb.job_title IS NOT NULL
+                      AND cb.job_title <> ''
+                    GROUP BY cb.job_title
+                ) t
+            ) ct ON ct.job_title = js.job_title
             WHERE js.job_title IS NOT NULL
               AND js.job_title <> ''
               AND js.median_salary IS NOT NULL
@@ -758,39 +801,39 @@ class Salary3DService:
                 SELECT
                     t.job_title,
                     CASE
-                        WHEN t.cnt_t1 >= GREATEST(t.cnt_new_t1, t.cnt_t2, t.cnt_other) THEN '一线'
-                        WHEN t.cnt_new_t1 >= GREATEST(t.cnt_t1, t.cnt_t2, t.cnt_other) THEN '新一线'
-                        WHEN t.cnt_t2 >= GREATEST(t.cnt_t1, t.cnt_new_t1, t.cnt_other) THEN '二线'
+                        WHEN t.w_new_t1 >= GREATEST(t.w_t1, t.w_t2, t.w_t3, t.w_other) THEN '新一线'
+                        WHEN t.w_t1 >= GREATEST(t.w_new_t1, t.w_t2, t.w_t3, t.w_other) THEN '一线'
+                        WHEN t.w_t2 >= GREATEST(t.w_t1, t.w_new_t1, t.w_t3, t.w_other) THEN '二线'
+                        WHEN t.w_t3 >= GREATEST(t.w_t1, t.w_new_t1, t.w_t2, t.w_other) THEN '三线'
                         ELSE '其他'
                     END AS city_tier
                 FROM (
                     SELECT
-                        d.job_title,
-                        SUM(CASE WHEN d.city IN ('北京', '上海', '广州', '深圳') THEN 1 ELSE 0 END) AS cnt_t1,
-                        SUM(CASE WHEN d.city IN (
-                            '成都', '重庆', '杭州', '武汉', '西安', '苏州', '天津', '南京',
-                            '郑州', '长沙', '东莞', '沈阳', '青岛', '合肥', '佛山'
-                        ) THEN 1 ELSE 0 END) AS cnt_new_t1,
-                        SUM(CASE WHEN d.city IN (
-                            '宁波', '无锡', '厦门', '福州', '济南', '大连', '哈尔滨', '昆明',
-                            '长春', '温州', '石家庄', '泉州', '南宁', '金华', '常州', '珠海',
-                            '惠州', '嘉兴', '南昌', '中山', '太原', '徐州', '南通'
-                        ) THEN 1 ELSE 0 END) AS cnt_t2,
-                        SUM(CASE WHEN d.city IS NULL OR d.city = '' THEN 0 ELSE 1 END)
-                          - SUM(CASE WHEN d.city IN ('北京', '上海', '广州', '深圳') THEN 1 ELSE 0 END)
-                          - SUM(CASE WHEN d.city IN (
-                              '成都', '重庆', '杭州', '武汉', '西安', '苏州', '天津', '南京',
-                              '郑州', '长沙', '东莞', '沈阳', '青岛', '合肥', '佛山'
-                          ) THEN 1 ELSE 0 END)
-                          - SUM(CASE WHEN d.city IN (
-                              '宁波', '无锡', '厦门', '福州', '济南', '大连', '哈尔滨', '昆明',
-                              '长春', '温州', '石家庄', '泉州', '南宁', '金华', '常州', '珠海',
-                              '惠州', '嘉兴', '南昌', '中山', '太原', '徐州', '南通'
-                          ) THEN 1 ELSE 0 END) AS cnt_other
-                    FROM data d
-                    WHERE d.job_title IS NOT NULL
-                      AND d.job_title <> ''
-                    GROUP BY d.job_title
+                        cb.job_title,
+                        SUM(CASE WHEN INSTR(ctm.city_tier, '新一线') > 0 THEN COALESCE(cb.job_in_city_cnt, 1) ELSE 0 END) AS w_new_t1,
+                        SUM(CASE
+                              WHEN ctm.city_tier = '一线'
+                                OR (INSTR(ctm.city_tier, '一线') > 0 AND INSTR(ctm.city_tier, '新一线') = 0)
+                              THEN COALESCE(cb.job_in_city_cnt, 1) ELSE 0 END) AS w_t1,
+                        SUM(CASE WHEN INSTR(ctm.city_tier, '二线') > 0 THEN COALESCE(cb.job_in_city_cnt, 1) ELSE 0 END) AS w_t2,
+                        SUM(CASE WHEN INSTR(ctm.city_tier, '三线') > 0 THEN COALESCE(cb.job_in_city_cnt, 1) ELSE 0 END) AS w_t3,
+                        SUM(CASE
+                              WHEN ctm.city_tier IS NULL OR ctm.city_tier = ''
+                                OR (
+                                    INSTR(ctm.city_tier, '一线') = 0
+                                    AND INSTR(ctm.city_tier, '二线') = 0
+                                    AND INSTR(ctm.city_tier, '三线') = 0
+                                )
+                              THEN COALESCE(cb.job_in_city_cnt, 1) ELSE 0 END) AS w_other
+                    FROM cluster_by_city cb
+                    LEFT JOIN (
+                        SELECT city, MIN(city_tier) AS city_tier
+                        FROM city_type_statistics
+                        GROUP BY city
+                    ) ctm ON ctm.city = cb.city
+                    WHERE cb.job_title IS NOT NULL
+                      AND cb.job_title <> ''
+                    GROUP BY cb.job_title
                 ) t
             ) ct ON ct.job_title = js.job_title
             WHERE js.job_title IS NOT NULL
@@ -988,6 +1031,8 @@ class Salary3DService:
             return "一线"
         if "二线" in s:
             return "二线"
+        if "三线" in s:
+            return "三线"
         return "其他"
 
     def _build_parallel_payload(
@@ -1005,7 +1050,7 @@ class Salary3DService:
 
         education_labels = ["大专及以下", "本科", "硕士", "博士及以上"]
         experience_labels = ["无经验", "1年以下", "1-3年", "3-5年", "5-7年", "7-10年", "10年以上"]
-        city_labels = ["一线", "新一线", "二线", "其他"]
+        city_labels = ["一线", "新一线", "二线", "三线", "其他"]
 
         company_counter = Counter([str(p.get("company_type") or "未知").strip() or "未知" for p in points])
         company_labels = [name for name, _ in company_counter.most_common(10)] + ["Other"]

@@ -113,11 +113,11 @@ const renderRadar = () => {
   radarChart = echarts.init(radarRef.value);
   const m = props.region.radar_metrics || {};
   const v = [
-    Number(m.education_level || 0),
-    Number(m.experience_demand || 0),
-    Number(m.scale_intensity || 0),
-    Number(m.finance_maturity || 0),
-    Number(m.skill_concentration || 0),
+    Number(m.barrier_index ?? ((Number(m.education_level || 0) + Number(m.experience_demand || 0)) * 0.5)),
+    Number(m.structure_index ?? ((Number(m.industry_entropy || 0) + Number(m.position_entropy || 0)) * 0.5)),
+    Number(m.high_salary_share || 0),
+    Number(m.top_industry_share || 0),
+    Number(m.top_position_share || 0),
   ];
   radarChart.setOption({
     title: { text: '多维特征雷达', left: 8, top: 4, textStyle: { fontSize: 13, color: '#2d538c' } },
@@ -129,11 +129,11 @@ const renderRadar = () => {
       splitLine: { lineStyle: { color: '#e6eefb' } },
       splitArea: { show: true, areaStyle: { color: ['#fbfdff', '#f5f9ff'] } },
       indicator: [
-        { name: '学历门槛', max: 1 },
-        { name: '经验门槛', max: 1 },
-        { name: '规模强度', max: 1 },
-        { name: '成熟度', max: 1 },
-        { name: '技能集中', max: 1 },
+        { name: '门槛指数', max: 1 },
+        { name: '结构指数', max: 1 },
+        { name: '高薪占比', max: 1 },
+        { name: '头部行业占比', max: 1 },
+        { name: '头部职位占比', max: 1 },
       ],
     },
     tooltip: { trigger: 'item' },

@@ -36,8 +36,10 @@ export async function getIndustryDetail(industryName) {
  * 获取职位综合排名柱状图数据
  * @returns {Promise<Object>} 职位排名数据
  */
-export async function getJobRanking() {
-  return await apiClient.get('/industry/ranking/jobs')
+export async function getJobRanking(topN = 5) {
+  return await apiClient.get('/industry/ranking/jobs', {
+    params: { top_n: topN }
+  })
 }
 
 /**
@@ -87,6 +89,21 @@ export async function getQ5ForceHubRanking(topN = 30, topKIndustry = 12) {
     params: {
       top_n: topN,
       top_k_industry: topKIndustry
+    }
+  })
+}
+
+/**
+ * 获取 Q5 对比岗位（非新兴）
+ * @param {number} topN - 返回岗位数量
+ * @param {number} emergingTopN - 排除的新兴TopN
+ * @returns {Promise<Object>}
+ */
+export async function getQ5ForceContrastJobs(topN = 4, emergingTopN = 5) {
+  return await apiClient.get('/q5/force/contrast-jobs', {
+    params: {
+      top_n: topN,
+      emerging_top_n: emergingTopN
     }
   })
 }

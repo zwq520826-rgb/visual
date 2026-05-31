@@ -121,7 +121,7 @@ const nClusters = ref(4);
 const algorithm = ref('kmeans');
 const sampleSize = ref(0);
 const selectedTier = ref('first_tier');
-const selectedMetric = ref('job_count');
+const selectedMetric = ref('industry_ratio');
 
 const tierOptions = [
   { value: 'first_tier', label: '一线城市' },

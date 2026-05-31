@@ -58,8 +58,10 @@ const emit = defineEmits(['select-city', 'hover-city', 'view-change'])
 
 const chartRef = ref(null)
 let chartInstance = null
+let renderRafId = 0
+let resizeRafId = 0
 
-const JOB_COLORS = ['#2f6df6', '#f06449', '#36b87c']
+const JOB_COLORS = ['#4d7dff', '#ff7a63', '#41be88']
 const SLOT_INDEX_MAP = { A: 0, B: 1, C: 2 }
 let mapRegistered = false
 const currentView = ref({
@@ -113,17 +115,23 @@ const buildSeriesData = () => {
     .filter((v) => v > 0)
   if (!totals.length) return []
 
+  // 半径映射：需求越大环形越大（采用 log 非线性，避免极端值把其余点压扁）
   const minV = Math.min(...totals)
   const maxV = Math.max(...totals)
-  const span = Math.max(maxV - minV, 1)
+  const minL = Math.log1p(minV)
+  const maxL = Math.log1p(maxV)
+  const spanL = Math.max(maxL - minL, 1e-6)
+  const minRadius = 4.8
+  const maxRadius = 12.8
 
   return props.markers.map((m) => {
     const originalTotal = Math.max(toNumber(m.total, 0), 1)
     const counts = [toNumber(m.counts?.[0], 0), toNumber(m.counts?.[1], 0), toNumber(m.counts?.[2], 0)]
     const activeTotal = indexes.reduce((sum, idx) => sum + Math.max(0, counts[idx] || 0), 0)
     if (activeTotal <= 0) return null
-    const norm = (activeTotal - minV) / span
-    const radius = 8 + norm * 14
+    const norm = (Math.log1p(activeTotal) - minL) / spanL
+    const eased = Math.pow(Math.max(0, Math.min(1, norm)), 0.72)
+    const radius = Math.round((minRadius + eased * (maxRadius - minRadius)) * 10) / 10
     const selected = m.code === props.selectedCode
     const singleIndex = indexes.length === 1 ? indexes[0] : -1
     const dotColor = singleIndex >= 0 ? JOB_COLORS[singleIndex] : '#58d3ff'
@@ -153,16 +161,152 @@ const buildSeriesData = () => {
         shadowBlur: 22,
         shadowColor: singleIndex >= 0 ? hexToRgba(dotColor, 0.45) : 'rgba(94,216,255,0.45)'
       },
-      value: [toNumber(m.mappedLon), toNumber(m.mappedLat), activeTotal, counts[0], counts[1], counts[2], radius, originalTotal]
+      value: [
+        toNumber(m.mappedLon),
+        toNumber(m.mappedLat),
+        activeTotal,
+        counts[0],
+        counts[1],
+        counts[2],
+        radius,
+        originalTotal,
+        selected ? 1 : 0,
+        toNumber(m.x, 50),
+        toNumber(m.y, 50)
+      ]
     }
   }).filter(Boolean)
 }
 
+const computeNonOverlapLayout = (data) => {
+  if (!Array.isArray(data) || !data.length) {
+    return { map: new Map(), hidden: new Set() }
+  }
+
+  const width = chartRef.value?.clientWidth || 1200
+  const height = chartRef.value?.clientHeight || props.chartHeight || 560
+  const margin = 8
+  const gap = 3.2
+
+  const points = data.map((d, idx) => {
+    const lon = Number(d?.value?.[0] || 0)
+    const lat = Number(d?.value?.[1] || 0)
+    const fallbackXPct = Number(d?.value?.[9] || 50)
+    const fallbackYPct = Number(d?.value?.[10] || 50)
+    const fallbackPx = [
+      (Math.max(0, Math.min(100, fallbackXPct)) / 100) * width,
+      (Math.max(0, Math.min(100, fallbackYPct)) / 100) * height
+    ]
+    let px = fallbackPx
+    if (chartInstance) {
+      try {
+        const geoPx = chartInstance.convertToPixel({ geoIndex: 0 }, [lon, lat])
+        if (Array.isArray(geoPx) && Number.isFinite(geoPx[0]) && Number.isFinite(geoPx[1])) {
+          px = geoPx
+        }
+      } catch (_) {
+        px = fallbackPx
+      }
+    }
+
+    const baseR = Math.max(4.2, Number(d?.value?.[6] || 4.2))
+    // 把外圈描边/阴影也算进碰撞半径，避免“视觉上看似重叠”
+    const outerR = baseR + 2.2 + 2.2
+
+    return {
+      key: String(idx),
+      idx,
+      x: px[0],
+      y: px[1],
+      r: outerR
+    }
+  })
+
+  // 第一步：重叠裁剪（同区域重叠只保留更大的）
+  const hidden = new Set()
+  const kept = []
+  const byRadius = [...points].sort((a, b) => b.r - a.r)
+  for (const p of byRadius) {
+    const overlapped = kept.some((k) => {
+      const dx = p.x - k.x
+      const dy = p.y - k.y
+      const dist = Math.hypot(dx, dy)
+      const minDist = p.r + k.r + gap
+      return dist < minDist
+    })
+    if (overlapped) {
+      hidden.add(p.key)
+      continue
+    }
+    kept.push({ ...p })
+  }
+
+  // 第二步：对保留点做轻量全局松弛，避免边界碰撞
+  const solved = kept.map((p) => ({ ...p }))
+
+  // 全局松弛：双向推开，优先满足“不重叠”
+  for (let iter = 0; iter < 140; iter += 1) {
+    let moved = false
+    for (let i = 0; i < solved.length; i += 1) {
+      for (let j = i + 1; j < solved.length; j += 1) {
+        const a = solved[i]
+        const b = solved[j]
+        let dx = b.x - a.x
+        let dy = b.y - a.y
+        let dist = Math.hypot(dx, dy)
+        const minDist = a.r + b.r + gap
+        if (dist >= minDist) continue
+        moved = true
+        if (dist < 0.001) {
+          const ang = (((i + 7) * 71 + (j + 13) * 37 + iter * 19) % 360) * Math.PI / 180
+          dx = Math.cos(ang)
+          dy = Math.sin(ang)
+          dist = 1
+        }
+        const overlap = minDist - dist
+        const ux = dx / dist
+        const uy = dy / dist
+        // 双向分摊位移，质量近似按半径反比
+        const wa = 1 / Math.max(1, a.r)
+        const wb = 1 / Math.max(1, b.r)
+        const wsum = wa + wb
+        const moveA = overlap * (wa / wsum)
+        const moveB = overlap * (wb / wsum)
+        a.x -= ux * moveA
+        a.y -= uy * moveA
+        b.x += ux * moveB
+        b.y += uy * moveB
+      }
+    }
+
+    for (const p of solved) {
+      p.x = Math.max(margin + p.r, Math.min(width - margin - p.r, p.x))
+      p.y = Math.max(margin + p.r, Math.min(height - margin - p.r, p.y))
+    }
+
+    if (!moved) break
+  }
+
+  const byKey = new Map()
+  for (const p of solved) {
+    byKey.set(p.key, p)
+  }
+
+  return { map: byKey, hidden }
+}
+
 const buildOption = () => {
   const data = buildSeriesData()
+  const idxList = activeIndexes()
+  const idxSet = new Set(idxList)
+  const slotPalette = JOB_COLORS
+  const layoutResult = computeNonOverlapLayout(data)
+  const layoutByCode = layoutResult.map
+  const hiddenKeys = layoutResult.hidden
 
   return {
     backgroundColor: 'transparent',
+    animation: false,
     tooltip: {
       trigger: 'item',
       confine: true,
@@ -212,63 +356,84 @@ const buildOption = () => {
     },
     series: [
       {
-        type: 'scatter',
+        type: 'custom',
         coordinateSystem: 'geo',
-        z: 4,
-        silent: true,
-        symbol: 'circle',
+        z: 6,
         data,
-        symbolSize: (val) => Math.max(10, Number(val?.[6] || 10) + 8),
-        itemStyle: {
-          color: 'rgba(94,216,255,0.14)',
-          borderColor: 'rgba(138,232,255,0.36)',
-          borderWidth: 1,
-          shadowBlur: 18,
-          shadowColor: 'rgba(44, 166, 255, 0.35)'
-        }
-      },
-      {
-        type: 'effectScatter',
-        coordinateSystem: 'geo',
-        z: 8,
-        data,
-        showEffectOn: 'render',
-        rippleEffect: {
-          period: 4.2,
-          scale: 2.9,
-          brushType: 'stroke'
-        },
-        symbol: 'circle',
-        symbolSize: (val, params) => {
-          const base = Math.max(8, Number(val?.[6] || 8))
-          return params?.data?.selected ? base + 4 : base
-        },
-        itemStyle: {
-          color: '#58d3ff',
-          borderColor: '#d8f8ff',
-          borderWidth: 1.3,
-          shadowBlur: 22,
-          shadowColor: 'rgba(94,216,255,0.45)'
-        },
-        emphasis: {
-          scale: 1.14,
-          itemStyle: {
-            borderWidth: 2
-          },
-          label: {
-            show: true,
-            formatter: ({ data }) => data?.code || '',
-            color: '#9ee9ff',
-            fontSize: 12,
-            fontWeight: 700,
-            position: 'right',
-            distance: 7,
-            backgroundColor: 'rgba(8,24,46,0.86)',
-            borderColor: 'rgba(94,216,255,0.42)',
-            borderWidth: 1,
-            borderRadius: 6,
-            padding: [3, 6]
-          }
+        renderItem: (params, api) => {
+          const lon = Number(api.value(0))
+          const lat = Number(api.value(1))
+          const coord = api.coord([lon, lat])
+          if (!coord || !Number.isFinite(coord[0]) || !Number.isFinite(coord[1])) return null
+
+          const counts = [
+            Math.max(0, Number(api.value(3) || 0)),
+            Math.max(0, Number(api.value(4) || 0)),
+            Math.max(0, Number(api.value(5) || 0))
+          ]
+          const totalActive = idxList.reduce((sum, idx) => sum + (idxSet.has(idx) ? counts[idx] : 0), 0)
+          if (totalActive <= 0) return null
+
+          const baseR = Math.max(4.2, Number(api.value(6) || 4.2))
+          const outerR = baseR + 2.2
+          const layoutKey = String(params?.dataIndex)
+          if (hiddenKeys.has(layoutKey)) return null
+          const layout = layoutByCode.get(layoutKey)
+          const cx = layout?.x ?? coord[0]
+          const cy = layout?.y ?? coord[1]
+          const isSelected = Number(api.value(8) || 0) === 1
+
+          let start = -Math.PI / 2
+          const children = []
+          const sliceGap = 0.022
+
+          idxList.forEach((idx) => {
+            if (!idxSet.has(idx)) return
+            const val = counts[idx]
+            if (val <= 0) return
+            const delta = (val / totalActive) * Math.PI * 2
+            if (delta <= 0) return
+            const gap = Math.min(sliceGap, delta * 0.3)
+            const segStart = start + gap / 2
+            const segEnd = start + delta - gap / 2
+            if (segEnd <= segStart) {
+              start += delta
+              return
+            }
+            children.push({
+              type: 'sector',
+              shape: {
+                cx,
+                cy,
+                r0: 0,
+                r: outerR,
+                startAngle: segStart,
+                endAngle: segEnd,
+                clockwise: true
+              },
+              style: {
+                fill: slotPalette[idx],
+                opacity: 0.95,
+                stroke: 'rgba(255,255,255,0.88)',
+                lineWidth: 1.05
+              }
+            })
+            start += delta
+          })
+
+          // 外边框：强调选中态但不过分刺眼
+          children.push({
+            type: 'circle',
+            shape: { cx, cy, r: outerR + (isSelected ? 1.45 : 0.8) },
+            style: {
+              fill: 'transparent',
+              stroke: isSelected ? '#dff7ff' : 'rgba(220, 236, 255, 0.92)',
+              lineWidth: isSelected ? 2.0 : 1.05,
+              shadowBlur: isSelected ? 8 : 3,
+              shadowColor: isSelected ? 'rgba(94,216,255,0.55)' : 'rgba(100,130,180,0.28)'
+            }
+          })
+          return { type: 'group', children }
         }
       }
     ]
@@ -315,11 +480,28 @@ const renderChart = async () => {
     mapRegistered = true
   }
 
-  chartInstance.setOption(buildOption(), true)
+  chartInstance.setOption(buildOption(), { notMerge: true, lazyUpdate: true })
 }
 
 const resizeChart = () => {
-  chartInstance?.resize()
+  if (!chartInstance) return
+  if (resizeRafId) {
+    cancelAnimationFrame(resizeRafId)
+  }
+  resizeRafId = requestAnimationFrame(() => {
+    chartInstance?.resize()
+    resizeRafId = 0
+  })
+}
+
+const scheduleRender = () => {
+  if (renderRafId) {
+    cancelAnimationFrame(renderRafId)
+  }
+  renderRafId = requestAnimationFrame(() => {
+    renderChart()
+    renderRafId = 0
+  })
 }
 
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v))
@@ -396,17 +578,13 @@ watch(
     props.activeJobSlots,
     props.loading,
     props.selectedCode,
-    props.chartHeight,
     props.mapLayoutSize,
-    props.mapCenterX,
-    props.mapCenterY,
-    props.mapZoom,
     props.mapAspectScale
   ],
   () => {
-    renderChart().then(() => resizeChart())
+    scheduleRender()
   },
-  { deep: true }
+  { deep: false }
 )
 
 watch(
@@ -426,13 +604,28 @@ watch(
   }
 )
 
+watch(
+  () => props.chartHeight,
+  () => {
+    nextTick(() => resizeChart())
+  }
+)
+
 onMounted(() => {
   syncViewFromProps()
-  renderChart()
+  scheduleRender()
   window.addEventListener('resize', resizeChart)
 })
 
 onBeforeUnmount(() => {
+  if (renderRafId) {
+    cancelAnimationFrame(renderRafId)
+    renderRafId = 0
+  }
+  if (resizeRafId) {
+    cancelAnimationFrame(resizeRafId)
+    resizeRafId = 0
+  }
   window.removeEventListener('resize', resizeChart)
   if (chartInstance) {
     chartInstance.dispose()

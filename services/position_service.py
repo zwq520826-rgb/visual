@@ -14,6 +14,16 @@ logger = logging.getLogger(__name__)
 
 class PositionService:
     """职位画像分析服务类"""
+
+    # 前置推荐的3个“更易对比”职位：
+    # - e5... : 相对低薪、覆盖中等
+    # - c9... : 覆盖最广、样本量高
+    # - 71... : 相对高薪、覆盖集中
+    PREFERRED_JOB_TITLES = [
+        "e5ebf2752a03d6729cb633770e4eddd7Hd",
+        "c9a30a5443d04270fb0f49d437c3376bAy",
+        "71f952e353628d7e2f40d40038b09ac2Tn",
+    ]
     
     def __init__(self, db_manager: DatabaseManager):
         self.db_manager = db_manager
@@ -21,17 +31,22 @@ class PositionService:
     def get_job_titles_list(self) -> List[str]:
         """
         获取职位名称列表（前100个）
-        从job_summary_by_title表中获取前100个不重复的职位名称
+        规则：
+        1) 样本量高的职位优先
+        2) 将预设的3个“更易对比”职位置顶
         
         Returns:
-            职位名称列表，按字母顺序排序，最多100个
+            职位名称列表，最多100个
         """
         query = """
-            SELECT DISTINCT job_title
+            SELECT DISTINCT
+                job_title,
+                CAST(records_count AS UNSIGNED) AS records_count_num
             FROM job_summary_by_title
             WHERE job_title IS NOT NULL
-            ORDER BY job_title
-            LIMIT 100
+              AND records_count IS NOT NULL
+            ORDER BY records_count_num DESC, job_title
+            LIMIT 300
         """
         
         results = self.db_manager.execute_query(query)
@@ -40,10 +55,14 @@ class PositionService:
             logger.warning("未找到任何职位数据")
             return []
         
-        # 提取职位名称列表
-        job_titles = [row[0] for row in results if row[0]]
+        ranked_job_titles = [row[0] for row in results if row and row[0]]
+
+        # 先放置推荐职位（如果在结果中存在）
+        preferred = [title for title in self.PREFERRED_JOB_TITLES if title in ranked_job_titles]
+        others = [title for title in ranked_job_titles if title not in preferred]
+        job_titles = (preferred + others)[:100]
         
-        logger.info(f"获取到 {len(job_titles)} 个职位（限制为前100个）")
+        logger.info(f"获取到 {len(job_titles)} 个职位（推荐职位已置顶）")
         return job_titles
     
     def get_parallel_coordinates_data(self, job_titles: List[str]) -> Dict[str, Any]:
@@ -559,10 +578,10 @@ class PositionService:
         
         # 从 job_city_distribution 表获取城市分布数据
         city_query = """
-            SELECT city, count, percent
+            SELECT city, job_count
             FROM job_city_distribution
             WHERE job_title = %s
-            ORDER BY CAST(count AS UNSIGNED) DESC
+            ORDER BY job_count DESC
         """
         city_results = self.db_manager.execute_query(city_query, (job_title,))
         
@@ -570,11 +589,14 @@ class PositionService:
         top_cities = []
         all_cities = []
         if city_results:
+            total_city_jobs = sum(int(row[1]) if row[1] else 0 for row in city_results)
             for idx, row in enumerate(city_results):
+                count_val = int(row[1]) if row[1] else 0
+                percentage_val = (count_val / total_city_jobs * 100) if total_city_jobs > 0 else 0.0
                 city_data = {
                     "city": row[0],
-                    "count": int(row[1]) if row[1] else 0,
-                    "percentage": round(float(row[2]), 2) if row[2] else 0.0
+                    "count": count_val,
+                    "percentage": round(percentage_val, 2)
                 }
                 all_cities.append(city_data)
                 if idx < 3:
@@ -619,4 +641,3 @@ class PositionService:
                 "position_percentile": round(position_percentile, 2)
             }
         }
-

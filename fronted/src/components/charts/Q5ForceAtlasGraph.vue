@@ -86,9 +86,11 @@ function buildMergedGraph(width = 1600, height = 620) {
   const nodes = []
   const links = []
   const centers = {}
+  const activeTitle = props.activeJobTitle || (props.networks[0]?.job_title || '')
 
   props.networks.forEach((network, idx) => {
     const job = network?.job_title || `job_${idx + 1}`
+    const isActiveCluster = job === activeTitle
     const clusterPrefix = `g${idx}`
     const centerNodeRaw = (network.nodes || []).find(n => n.type === 'job') || {}
     const centerSize = Number(centerNodeRaw.symbolSize || 54)
@@ -100,12 +102,26 @@ function buildMergedGraph(width = 1600, height = 620) {
       id: centerId,
       name: job,
       type: 'job',
+      cluster_job_title: job,
+      is_active_cluster: isActiveCluster,
       value: Number(centerNodeRaw.value || network?.summary?.job_total_count || 0),
       symbolSize: Number(centerNodeRaw.symbolSize || 54),
-      itemStyle: centerNodeRaw.itemStyle || { color: '#ffd166' },
+      itemStyle: {
+        ...(centerNodeRaw.itemStyle || { color: '#ffd166' }),
+        borderColor: isActiveCluster ? '#fff6cc' : 'rgba(189,215,255,0.45)',
+        borderWidth: isActiveCluster ? 2.2 : 1.2,
+        shadowBlur: isActiveCluster ? 16 : 6,
+        shadowColor: isActiveCluster ? 'rgba(255,222,120,0.72)' : 'rgba(96,142,212,0.22)',
+        opacity: isActiveCluster ? 1 : 0.66
+      },
       x: centerX,
       y: centerY,
-      label: { show: true, color: '#dfefff' }
+      label: {
+        show: true,
+        color: '#dfefff',
+        fontSize: isActiveCluster ? 15 : 11,
+        fontWeight: isActiveCluster ? 700 : 500
+      }
     })
 
     const nodeByIndustry = new Map()
@@ -129,23 +145,31 @@ function buildMergedGraph(width = 1600, height = 620) {
         id: indId,
         name: industryName,
         type: 'industry',
+        cluster_job_title: job,
+        is_active_cluster: isActiveCluster,
         node_class: nodeClass,
         value: Number(indRaw.value || edge.value || 0),
         salary: Number(edge.salary || indRaw.salary || 0),
         symbolSize: Number(indRaw.symbolSize || 22),
-        itemStyle: indRaw.itemStyle || { color: '#4ea8de' },
+        itemStyle: {
+          ...(indRaw.itemStyle || { color: '#4ea8de' }),
+          opacity: isActiveCluster ? 0.98 : 0.42
+        },
         x,
         y,
         label: {
           show: indRaw?.label?.show !== false,
           color: '#d7e6ff',
-          fontSize: nodeClass === 'dust' ? 0 : 11
+          fontSize: nodeClass === 'dust' ? 0 : (isActiveCluster ? 11 : 9),
+          opacity: isActiveCluster ? 1 : 0.52
         }
       })
 
       links.push({
         source: centerId,
         target: indId,
+        cluster_job_title: job,
+        is_active_cluster: isActiveCluster,
         edge_class: edge.edge_class || 'core',
         value: Number(edge.value || 0),
         salary: Number(edge.salary || 0),
@@ -199,6 +223,8 @@ function buildOption() {
     const t = salSpan > 0 ? (salary - salMin) / salSpan : 0.5
     const base = salaryColorByT(t)
     const isDust = l.edge_class === 'dust'
+    const isActiveCluster = !!l.is_active_cluster
+    const baseWidth = Number(l.lineStyle?.width || 2.5)
     const color = isDust ? mixWithWhite(base, 0.72) : base
     const mainLink = {
       ...l,
@@ -208,7 +234,11 @@ function buildOption() {
       emphasis: isDust ? { disabled: true } : undefined,
       lineStyle: {
         ...(l.lineStyle || {}),
-        color
+        color,
+        width: isDust ? baseWidth : (isActiveCluster ? Math.max(baseWidth, 3.4) : Math.max(baseWidth * 0.86, 1.4)),
+        opacity: isDust
+          ? (isActiveCluster ? 0.34 : 0.1)
+          : (isActiveCluster ? 0.95 : 0.23)
       }
     }
     if (isDust) return [mainLink]
@@ -233,6 +263,8 @@ function buildOption() {
   return {
     backgroundColor: 'transparent',
     animationDuration: 900,
+    animationDurationUpdate: 520,
+    animationEasingUpdate: 'cubicOut',
     tooltip: {
       trigger: 'item',
       backgroundColor: 'rgba(10,16,30,0.92)',
@@ -259,6 +291,10 @@ function buildOption() {
         type: 'graph',
         layout: 'none',
         roam: true,
+        // 通过视口缩放实现“镜头放大”，不是放大节点
+        center: ['50%', '52%'],
+        zoom: props.activeJobTitle ? 1.42 : 1.0,
+        scaleLimit: { min: 0.55, max: 2.8 },
         draggable: false,
         focusNodeAdjacency: true,
         data: merged.nodes,
@@ -284,6 +320,7 @@ async function renderChart() {
   renderError.value = ''
   try {
     if (!chart) chart = echarts.init(chartEl.value)
+    chart.clear()
     chart.setOption(buildOption(), true)
     chart.resize()
   } catch (e) {

@@ -6,12 +6,15 @@
 
     <div v-else class="silhouette-content">
       <div class="job-cards">
+        <div class="job-cards-spacer" aria-hidden="true"></div>
         <div
-          v-for="(job, idx) in jobs"
-          :key="job.job_title"
+          v-for="(job, idx) in displayJobs"
+          :key="job?.job_title || `job-empty-${idx}`"
           class="job-card"
+          :class="{ empty: !job }"
           :style="{ '--job-color': palette[idx] }"
         >
+          <template v-if="job">
           <div class="avatar">
             <svg v-if="idx === 0" viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <circle cx="12" cy="8.2" r="3.2" stroke="currentColor" stroke-width="1.8"/>
@@ -34,6 +37,7 @@
           <div class="job-strength">
             <span :style="{ width: `${scorePercent(job)}%` }"></span>
           </div>
+          </template>
         </div>
       </div>
 
@@ -45,12 +49,14 @@
           </div>
           <div class="metric-values">
             <div
-              v-for="(job, idx) in jobs"
-              :key="metric.key + job.job_title"
+              v-for="(job, idx) in displayJobs"
+              :key="`${metric.key}-${job?.job_title || idx}`"
               class="energy-cell"
+              :class="{ empty: !job }"
               :style="{ '--job-color': palette[idx] }"
-              :title="`${metric.label}: ${metricValue(job, metric.key).toFixed(1)}`"
+              :title="job ? `${metric.label}: ${metricValue(job, metric.key).toFixed(1)}` : ''"
             >
+              <template v-if="job">
               <span class="energy-layout">
                 <span class="energy-bar">
                   <span
@@ -63,6 +69,7 @@
                   {{ metric.key === 'salary' ? salaryLabel(job) : '000.00K' }}
                 </span>
               </span>
+              </template>
             </div>
           </div>
         </div>
@@ -115,6 +122,12 @@ const SEGMENT_COUNT = 10
 const jobs = computed(() => {
   const list = props.data?.positions || []
   return list.slice(0, 3)
+})
+
+const displayJobs = computed(() => {
+  const arr = jobs.value.slice(0, 3)
+  while (arr.length < 3) arr.push(null)
+  return arr
 })
 
 const metricRanges = computed(() => {
@@ -188,6 +201,7 @@ const shorten = (text) => {
 }
 
 .silhouette-content {
+  --label-col-width: 150px;
   height: 100%;
   display: grid;
   grid-template-rows: auto 1fr auto;
@@ -210,8 +224,12 @@ const shorten = (text) => {
 
 .job-cards {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
+  grid-template-columns: var(--label-col-width) repeat(3, minmax(0, 1fr));
+  gap: 0;
+}
+
+.job-cards-spacer {
+  min-height: 1px;
 }
 
 .job-card {
@@ -223,6 +241,11 @@ const shorten = (text) => {
   box-shadow: 0 8px 18px rgba(33, 79, 130, 0.08);
   position: relative;
   overflow: hidden;
+}
+
+.job-card.empty {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .avatar {
@@ -283,7 +306,7 @@ const shorten = (text) => {
 
 .metric-row {
   display: grid;
-  grid-template-columns: 150px 1fr;
+  grid-template-columns: var(--label-col-width) 1fr;
   border-bottom: 1px solid #edf2fb;
 }
 
@@ -367,6 +390,10 @@ const shorten = (text) => {
   justify-content: center;
   padding: 10px 6px;
   position: relative;
+}
+
+.energy-cell.empty::before {
+  display: none;
 }
 
 .energy-cell::before {
@@ -454,8 +481,12 @@ const shorten = (text) => {
 }
 
 @media (max-width: 900px) {
+  .silhouette-content {
+    --label-col-width: 120px;
+  }
+
   .metric-row {
-    grid-template-columns: 120px 1fr;
+    grid-template-columns: var(--label-col-width) 1fr;
   }
 
   .metric-label {

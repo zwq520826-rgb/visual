@@ -10,7 +10,7 @@ class Config:
     DB_HOST = os.getenv('DB_HOST', 'localhost')
     DB_PORT = int(os.getenv('DB_PORT', 3306))
     DB_USER = os.getenv('DB_USER', 'root')
-    DB_PASSWORD = os.getenv('DB_PASSWORD', '123456')  # 请根据实际情况修改
+    DB_PASSWORD = os.getenv('DB_PASSWORD', '')  # 本机 Homebrew MySQL 默认常为空密码
     DB_NAME = os.getenv('DB_NAME', 'vision')
     DB_CHARSET = 'utf8mb4'
     
