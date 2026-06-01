@@ -12,34 +12,6 @@
         </h2>
         <p>支持最多三组职位对比，整合轮廓对比、路径解析与城市偏好分布。</p>
       </div>
-      <div class="hero-actions">
-        <label class="period-picker">
-          <span class="picker-label">
-            <span class="inline-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none">
-                <rect x="3.5" y="5.5" width="17" height="15" rx="2.5" stroke="currentColor" stroke-width="1.8"/>
-                <path d="M8 3.5V7M16 3.5V7M3.5 10H20.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-              </svg>
-            </span>
-            分析周期
-          </span>
-          <select v-model="analysisPeriod">
-            <option value="2024Q1">2024 Q1</option>
-            <option value="2024Q2">2024 Q2</option>
-            <option value="2024Q3">2024 Q3</option>
-          </select>
-        </label>
-        <button class="ghost-btn" type="button">
-          <span class="btn-inline">
-            <span class="inline-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none">
-                <path d="M12 4V14.5M12 14.5L8.2 10.7M12 14.5L15.8 10.7M4 18.5H20" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </span>
-            导出报告
-          </span>
-        </button>
-      </div>
     </header>
 
     <section class="selector-card">
@@ -344,7 +316,6 @@ import SankeyChart from '@/components/charts/SankeyChart.vue'
 import Q2CityPreferenceGeoMap from '@/components/charts/Q2CityPreferenceGeoMap.vue'
 import CustomSelect from '@/components/common/CustomSelect.vue'
 
-const analysisPeriod = ref('2024Q2')
 const jobTitlesList = ref([])
 const unifiedJobs = ref(['', '', ''])
 

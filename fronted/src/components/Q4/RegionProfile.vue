@@ -112,15 +112,53 @@ const renderRadar = () => {
   if (radarChart) radarChart.dispose();
   radarChart = echarts.init(radarRef.value);
   const m = props.region.radar_metrics || {};
-  const v = [
-    Number(m.barrier_index ?? ((Number(m.education_level || 0) + Number(m.experience_demand || 0)) * 0.5)),
-    Number(m.structure_index ?? ((Number(m.industry_entropy || 0) + Number(m.position_entropy || 0)) * 0.5)),
-    Number(m.high_salary_share || 0),
-    Number(m.top_industry_share || 0),
-    Number(m.top_position_share || 0),
+
+  const tierRaw = String(props.region.city_tier || '').trim();
+  const tierMap = {
+    '一线': 1.0,
+    '二线': 0.75,
+    '三线': 0.5,
+    '其他': 0.25,
+  };
+  const cityTierScore = Number.isFinite(tierMap[tierRaw]) ? tierMap[tierRaw] : Number(m.finance_maturity || 0);
+
+  const radarDims = [
+    {
+      name: '招聘规模强度',
+      value: Number(m.scale_intensity ?? m.log_job_count ?? 0),
+      desc: '对应热力图 metric=job_count 与聚类规模。',
+    },
+    {
+      name: '学历要求',
+      value: Number(m.education_level ?? 0),
+      desc: '地域招聘学历门槛强度。',
+    },
+    {
+      name: '经验要求',
+      value: Number(m.experience_demand ?? 0),
+      desc: '地域招聘经验门槛强度。',
+    },
+    {
+      name: '行业多样性',
+      value: Number(m.industry_entropy ?? 0),
+      desc: '行业分布越分散，数值越高。',
+    },
+    {
+      name: '职位多样性',
+      value: Number(m.position_entropy ?? 0),
+      desc: '职位分布越分散，数值越高。',
+    },
+    {
+      name: '城市等级',
+      value: cityTierScore,
+      desc: '由一线/二线/三线/其他映射为数值。',
+    },
   ];
+  const v = radarDims.map((d) => Math.max(0, Math.min(1, Number(d.value || 0))));
+  const indicators = radarDims.map((d) => ({ name: d.name, max: 1 }));
+
   radarChart.setOption({
-    title: { text: '多维特征雷达', left: 8, top: 4, textStyle: { fontSize: 13, color: '#2d538c' } },
+    title: { text: 'Q4 任务导向雷达', left: 8, top: 4, textStyle: { fontSize: 13, color: '#2d538c' } },
     radar: {
       center: ['50%', '56%'],
       radius: '62%',
@@ -128,15 +166,15 @@ const renderRadar = () => {
       axisName: { color: '#5f7ea8', fontSize: 11 },
       splitLine: { lineStyle: { color: '#e6eefb' } },
       splitArea: { show: true, areaStyle: { color: ['#fbfdff', '#f5f9ff'] } },
-      indicator: [
-        { name: '门槛指数', max: 1 },
-        { name: '结构指数', max: 1 },
-        { name: '高薪占比', max: 1 },
-        { name: '头部行业占比', max: 1 },
-        { name: '头部职位占比', max: 1 },
-      ],
+      indicator: indicators,
     },
-    tooltip: { trigger: 'item' },
+    tooltip: {
+      trigger: 'item',
+      formatter: () => {
+        const lines = radarDims.map((d, i) => `${d.name}：${(v[i] * 100).toFixed(1)}%`);
+        return [`${props.region.region_label || props.region.region_id || '地域画像'}`, ...lines].join('<br/>');
+      },
+    },
     series: [
       {
         type: 'radar',
